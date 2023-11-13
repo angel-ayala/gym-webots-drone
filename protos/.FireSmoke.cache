@@ -1,0 +1,11 @@
+Webots Proto Cache File version 1.5
+protoFileHash: 0e2b175cf5a9c876002a535ffb325a79
+needsRobotAncestor: 1
+baseType: Robot
+slotType: 
+parameters: name,translation,rotation,fireHeight,fireRadius,controller,controllerArgs,customData,synchronization
+tags: static
+license:  Copyright Angel Ayala. Licensed for use with research purpose onlys.
+licenseUrl:  https://www.github.com/angel-ayala
+documentationUrl: 
+info: Transparent\simages\ssequence\sto\ssimulate\sa\sfire\swith\ssmoke\sevent.\n
