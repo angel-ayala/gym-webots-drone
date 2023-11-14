@@ -289,8 +289,9 @@ class WebotsSimulation(Supervisor):
 
         timestamp = uav_state['timestamp']
         orientation = uav_state['orientation']
-        angular_vel = uav_state['angular_velocity']
+        angular_velocity = uav_state['angular_velocity']
         position = uav_state['position']
+        speed = uav_state['speed']
         north_deg = uav_state['north']
         dist_sensors = list()
 
@@ -326,8 +327,9 @@ class WebotsSimulation(Supervisor):
 
         self._data = dict(timestamp=timestamp,
                           orientation=orientation,
-                          angular_vel=angular_vel,
+                          angular_velocity=angular_velocity,
                           position=position,
+                          speed=speed,
                           north_deg=north_deg,
                           dist_sensors=dist_sensors,
                           motors_vel=uav_state['motors_vel'],

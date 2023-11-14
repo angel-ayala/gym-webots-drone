@@ -105,7 +105,7 @@ class DroneController(Robot):
 
     def __compute_disturbances(self, disturbances):
         # current state
-        orientation, velocity, position, _ = self.__drone.get_odometry()
+        orientation, velocity, position, _, _ = self.__drone.get_odometry()
         # compute velocities to stabilize momentum
         zero_momentum = self.__stabilize_pose(orientation, velocity)
         if disturbances[2] != 0:

@@ -10,12 +10,12 @@ import numpy as np
 
 
 def info2state(info):
-    state = list()
-    state.extend(info['position'])  # position
-    state.extend(info['orientation'])  # orientation angles
-    state.extend(info['speed'])  # pos_vel
-    state.extend(info['angular_velocity'])  # angular velocity
-    state = np.asarray(state, dtype=np.float32)
+    state = np.zeros((12, ), dtype=np.float32)
+    if info is not None:
+        state[:3] = info['position']  # position
+        state[3:6] = info['orientation']  # orientation angles
+        state[6:9] = info['speed']  # pos_vel
+        state[9:] = info['angular_velocity']  # angular velocity
     return state
 
 

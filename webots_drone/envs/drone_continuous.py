@@ -207,7 +207,6 @@ class DroneEnvContinuous(gym.Env):
     def __is_final_state(self, info, curr_distance):
         discount = 0
         end = False
-        info['final'] = 'No'
         # no action limit
         if self.__no_action_limit(info["position"]):
             logger.info(f"[{info['timestamp']}] Final state, Same position")
@@ -257,7 +256,7 @@ class DroneEnvContinuous(gym.Env):
             penalization -= 50
             info['penalization'] += 'out_flight_area|'
         return penalization
-    
+
     def compute_reward(self, obs, info):
         """Compute the distance-based reward.
 
@@ -269,6 +268,8 @@ class DroneEnvContinuous(gym.Env):
         :param float distance_threshold: Indicate the acceptable distance
             margin before the fire's risk zone.
         """
+        info['penalization'] = 'no'
+        info['final'] = 'no'
         curr_distance = self.sim.get_target_distance()
         # terminal states
         discount, end = self.__is_final_state(info, curr_distance)
@@ -338,7 +339,6 @@ class DroneEnvContinuous(gym.Env):
     def step(self, action):
         """Perform an action step in the simulation scene."""
         reward = 0
-        truncated = False
         for _ in range(self._frame_skip):
             observation, obs_reward, info = self.perform_action(action)
             reward += obs_reward  # step reward
@@ -353,7 +353,7 @@ class DroneEnvContinuous(gym.Env):
 
         self.last_state, self.last_info = observation, info
 
-        return self.last_state, reward, self._end, truncated, self.last_info
+        return self.last_state, reward, self._end, self.last_info
 
     def render(self, mode='human'):
         """Render the environment from Webots simulation."""

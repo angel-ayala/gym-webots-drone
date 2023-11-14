@@ -130,7 +130,7 @@ class Drone:
         orientation = self.imu.getRollPitchYaw()
         angular_velocity = self.gyro.getValues()
         position = self.gps.getValues()
-        speed = self.gps.getSpeed()
+        speed = self.gps.getSpeedVector()
         compass = self.compass.getValues()
         north_deg = np.arctan2(compass[0], compass[1])
         north_deg = (north_deg - 1.5708) / np.pi * 180

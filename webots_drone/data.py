@@ -103,22 +103,35 @@ def apply_phase(history_df, args_path):
 class StoreStepData:
     """Callback for save a Gym.state data."""
 
-    def __init__(self, store_path, is_obs_img=True):
-        self.is_obs_img = is_obs_img
+    def __init__(self, store_path):
         self.store_path = store_path
         state_cols = ['pos_x', 'pos_y', 'pos_z',
                       'ori_x', 'ori_y', 'ori_z',
                       'vel_x', 'vel_y', 'vel_z',
                       'velang_x', 'velang_y', 'velang_z',]
-        action_cols = ['roll', 'pitch', 'yaw', 'thrust']
+        # action_cols = ['roll', 'pitch', 'yaw', 'thrust']
+        action_cols = ['action']
 
-        self.data_cols = ['timestamp'] + state_cols
+        self.data_cols = ['phase', 'ep', 'iteration', 'timestamp']
+        self.data_cols += state_cols
         self.data_cols += action_cols
         self.data_cols += ['reward']
         self.data_cols += state_cols
         self.data_cols += ['absorbing', 'last']
         self._idx = 0
-        self.last_state = None
+        self.last_state = info2state(None).tolist()
+        self._phase = 'init'
+        self._ep = 0
+        self._iteration = 0
+
+    def set_learning(self):
+        self._phase = 'learn'
+        self._iteration = 0
+        self._ep += 1
+
+    def set_eval(self):
+        self._phase = 'eval'
+        self._iteration = 0
 
     def __call__(self, observation, info):
         # format state data
@@ -126,19 +139,23 @@ class StoreStepData:
         state = info2state(info).tolist()
 
         row = list()
+        row.extend([self._phase, self._ep, self._iteration])  # epdata
         row.append(info['timestamp'])  # action
         row.extend(self.last_state)  # state
-        row.extend(sample[1])  # action
+        # action
+        if type(sample[1]) == list:
+            row.extend(sample[1])
+        else:
+            row.append(sample[1])
         row.append(sample[2])  # reward
         row.extend(state)  # next state
         row.append(sample[4])  # absorbing
         row.append(sample[5])  # last
 
         for k, v in info.items():
-            if k in ['position', 'orientation', 'angular_velocity',
-                     'image', 'angular_vel',
-                     'timestamp', 'motors_vel',
-                     'emitter', 'rc_position']:
+            if k in ['position', 'orientation', 'angular_velocity', 'speed'
+                     'image', 'angular_vel', 'timestamp', 'motors_vel',
+                     'emitter', 'rc_position', 'target_position']:
                 continue
 
             if isinstance(v, list):
@@ -150,6 +167,10 @@ class StoreStepData:
                 if k not in self.data_cols:
                     self.data_cols.append(k)
                 row.append(v)
+
+        k = 'target_position'
+        self.data_cols.extend([k + '_x', k + '_y', k + '_z'])
+        row.extend(info[k])
 
         k = 'rc_position'
         self.data_cols.extend([k + '_x', k + '_y', k + '_z'])
@@ -176,3 +197,7 @@ class StoreStepData:
             outfile.writelines(','.join(map(str, row)) + '\n')
 
         self._idx += 1
+        self.last_state = state
+
+        if sample[-1]:
+            self._iteration += 1
