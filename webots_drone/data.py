@@ -103,7 +103,7 @@ def apply_phase(history_df, args_path):
 class StoreStepData:
     """Callback for save a Gym.state data."""
 
-    def __init__(self, store_path):
+    def __init__(self, store_path, epsilon=False):
         self.store_path = store_path
         state_cols = ['pos_x', 'pos_y', 'pos_z',
                       'ori_x', 'ori_y', 'ori_z',
@@ -123,6 +123,9 @@ class StoreStepData:
         self._phase = 'init'
         self._ep = 0
         self._iteration = 0
+        self.epsilon = epsilon
+        if epsilon is not False:
+            self.data_cols += ['epsilon']
 
     def set_learning(self):
         self._phase = 'learn'
@@ -132,6 +135,7 @@ class StoreStepData:
     def set_eval(self):
         self._phase = 'eval'
         self._iteration = 0
+        self._ep += 1
 
     def __call__(self, observation, info):
         # format state data
@@ -151,6 +155,8 @@ class StoreStepData:
         row.extend(state)  # next state
         row.append(sample[4])  # absorbing
         row.append(sample[5])  # last
+        if self.epsilon is not False:
+            row.append(self.epsilon.get_value())  # epsilon
 
         for k, v in info.items():
             if k in ['position', 'orientation', 'angular_velocity', 'speed'
