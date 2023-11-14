@@ -76,20 +76,15 @@ class WebotsSimulation(Supervisor):
 
     def set_limits(self):
         """Get the limits to manipulate the angles and altitude."""
-        # limits = np.array([np.pi / 12.,      # roll
-        #                    np.pi / 12.,      # pitch
-        #                    np.pi / 360.,     # yaw
-        #                    8.               # altitude
-        #                    ])
-        limits = np.array([2.,  # roll
-                           2.,  # pitch
-                           2.,  # yaw
-                           8.   # altitude
+        limits = np.array([np.pi / 12.,     # roll
+                           np.pi / 12.,     # pitch
+                           np.pi,           # yaw
+                           5.               # altitude
                            ])
         self.limits = np.array([limits * -1,  # low limist
                                 limits])      # high limits
         return self
-    
+
     def get_flight_area(self, altitude_limits):
         # rc_pos = self.getSelf().getPosition()
         # offset = [[50, 50, altitude_limits[0]],

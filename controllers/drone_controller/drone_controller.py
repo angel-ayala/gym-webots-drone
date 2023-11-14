@@ -98,8 +98,8 @@ class DroneController(Robot):
     def __stabilize_pose(self, pose_angles, pose_vel):
         phi, theta, psi = pose_angles
         p, q, r = pose_vel
-        roll = self.roll(-np.clip(phi, -1, 1), dt=self.__time_delta) + p
-        pitch = self.pitch(-np.clip(theta, -1, 1), dt=self.__time_delta) + q
+        roll = -self.roll(phi, dt=self.__time_delta) + p
+        pitch = -self.pitch(theta, dt=self.__time_delta) + q
         yaw = self.yaw(psi, dt=self.__time_delta)
         return [roll, pitch, yaw]
 
@@ -107,6 +107,8 @@ class DroneController(Robot):
         # current state
         orientation, velocity, position, _, _ = self.__drone.get_odometry()
         # compute velocities to stabilize momentum
+        self.roll.setpoint = disturbances[0]
+        self.pitch.setpoint = disturbances[1]
         zero_momentum = self.__stabilize_pose(orientation, velocity)
         if disturbances[2] != 0:
             self.yaw.setpoint = orientation[2]
@@ -116,8 +118,8 @@ class DroneController(Robot):
         if disturbances[3] != 0:
             self.vert.setpoint = curr_alt
         # apply disturbances velocities
-        pose_disturbance = [disturbances[0] + zero_momentum[0],
-                            disturbances[1] + zero_momentum[1],
+        pose_disturbance = [zero_momentum[0],
+                            zero_momentum[1],
                             disturbances[2] + zero_momentum[2],
                             disturbances[3] + trust]
         return pose_disturbance
