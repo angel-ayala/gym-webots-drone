@@ -38,7 +38,7 @@ DEF FlightArea Floor {
   appearance PBRAppearance {
     baseColorMap ImageTexture {
       url [
-        "textures/dry_leaf.jpg"
+        "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/default/worlds/textures/dry_grass.jpg"
       ]
     }
     roughness 1
@@ -84,7 +84,7 @@ Solid {
       appearance PBRAppearance {
         baseColorMap ImageTexture {
           url [
-            "textures/lightwood.jpg"
+            "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/default/worlds/textures/lightwood.jpg"
           ]
         }
         roughness 0.6
