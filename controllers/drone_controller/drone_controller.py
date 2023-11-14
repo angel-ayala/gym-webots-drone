@@ -140,7 +140,8 @@ class DroneController(Robot):
 
     def __send_state(self):
         # get current state
-        uav_orientation, uav_angular_velocity, uav_position, uav_north_deg = \
+        uav_orientation, uav_angular_velocity,\
+            uav_position, uav_speed, uav_north_deg =\
             self.__drone.get_odometry()
         uav_distance_sensors = self.__drone.get_dist_sensors()
         uav_image = self.__drone.get_image()
@@ -151,6 +152,7 @@ class DroneController(Robot):
                         orientation=uav_orientation,
                         angular_velocity=uav_angular_velocity,
                         position=uav_position,
+                        speed=uav_speed,
                         north=uav_north_deg,
                         dist_sensors=uav_distance_sensors,
                         motors_vel=motors_vel)

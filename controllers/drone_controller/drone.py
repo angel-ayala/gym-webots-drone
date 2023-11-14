@@ -130,6 +130,7 @@ class Drone:
         orientation = self.imu.getRollPitchYaw()
         angular_velocity = self.gyro.getValues()
         position = self.gps.getValues()
+        speed = self.gps.getSpeed()
         compass = self.compass.getValues()
         north_deg = np.arctan2(compass[0], compass[1])
         north_deg = (north_deg - 1.5708) / np.pi * 180
@@ -137,7 +138,7 @@ class Drone:
         if north_deg < 0.:
             north_deg += 360.
 
-        return orientation, angular_velocity, position, north_deg
+        return orientation, angular_velocity, position, speed, north_deg
 
     def get_image(self):
         """Get the Camera node image with size and channels.

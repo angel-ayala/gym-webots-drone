@@ -9,6 +9,16 @@ import base64
 import numpy as np
 
 
+def info2state(info):
+    state = list()
+    state.extend(info['position'])  # position
+    state.extend(info['orientation'])  # orientation angles
+    state.extend(info['speed'])  # pos_vel
+    state.extend(info['angular_velocity'])  # angular velocity
+    state = np.asarray(state, dtype=np.float32)
+    return state
+
+
 def emitter_send_json(emitter, data):
     str_data = json.dumps(data).encode('utf-8')
     emitter.send(str_data, len(str_data) + 1)
