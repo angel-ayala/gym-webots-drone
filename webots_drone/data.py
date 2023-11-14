@@ -144,10 +144,7 @@ class StoreStepData:
         self._ep += 1
 
     def __call__(self, sample, info):
-        # format state data
-        # sample = observation[0]
         state = info2state(info).tolist()
-
         row = list()
         row.extend([self._phase, self._ep, self._iteration])  # epdata
         row.append(info['timestamp'])  # action
@@ -246,9 +243,6 @@ class VideoCallback:
     def __call__(self, sample, info):
         if not self._recording:
             self._start_recording()
-
-        # sample = observation[0]
-
         if sample[5]:
             self._iteration += 1
             self._stop_recording()
