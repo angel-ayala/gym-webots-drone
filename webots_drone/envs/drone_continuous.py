@@ -55,7 +55,8 @@ class DroneEnvContinuous(gym.Env):
 
         # Observation space, the drone's camera image
         self.obs_type = np.uint8
-        self.obs_shape = (self.sim.image_shape[-1], 84, 84)
+        # self.obs_shape = (self.sim.image_shape[-1], 84, 84)
+        self.obs_shape = (3, 84, 84)
         self.observation_space = spaces.Box(low=0,
                                             high=255,
                                             shape=self.obs_shape,
@@ -109,7 +110,7 @@ class DroneEnvContinuous(gym.Env):
         hheight = self.sim.image_shape[0] // 2  # half height
         hcenter = self.sim.image_shape[1] // 2  # half width
         center_idx = (hcenter - hheight, hcenter + hheight)
-        result = np.asarray(img[:, center_idx[0]:center_idx[1], :],
+        result = np.asarray(img[:, center_idx[0]:center_idx[1], :3],
                             dtype=self.obs_type)
         # resize
         result = cv2.resize(result, self.obs_shape[1:],
@@ -245,16 +246,19 @@ class DroneEnvContinuous(gym.Env):
                                  150 / 2200,  # down back
                                  30 / 800]  # top
         penalization = 0
-        info['penalization'] = ''
+        penalization_str = ''
         # object_near
         if any(check_near_object(info["dist_sensors"],
                                  near_object_threshold)):
             penalization -= 25
-            info['penalization'] += 'object_near|'
+            penalization_str += 'object_near|'
         # outside flight area
         if any(check_flight_area(info["position"], self.flight_area)):
             penalization -= 50
-            info['penalization'] += 'out_flight_area|'
+            penalization_str += 'out_flight_area|'
+
+        if len(penalization_str) > 0:
+            info['penalization'] = penalization_str
         return penalization
 
     def compute_reward(self, obs, info):
