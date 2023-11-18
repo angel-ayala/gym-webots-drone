@@ -325,10 +325,10 @@ class DroneEnvContinuous(gym.Env):
 
         self.perform_action([0., 0., 0., 0.])  # no action
 
-    def reset(self, seed_value=None):
+    def reset(self, seed=None, options=None):
         """Reset episode in the Webots simulation."""
         # restart simulation
-        self.seed(seed_value)
+        self.seed(seed)
         self.sim.reset()
         # randomize fire position
         self.sim.randomize_fire_position()
@@ -338,7 +338,7 @@ class DroneEnvContinuous(gym.Env):
         self.lift_uav(self.init_altitude)
         self.last_state, self.last_info = self.get_state()
 
-        return self.last_state
+        return self.last_state, self.last_info
 
     def step(self, action):
         """Perform an action step in the simulation scene."""
@@ -357,7 +357,7 @@ class DroneEnvContinuous(gym.Env):
 
         self.last_state, self.last_info = observation, info
 
-        return self.last_state, reward, self._end, self.last_info
+        return self.last_state, reward, self._end, False, self.last_info
 
     def render(self, mode='human'):
         """Render the environment from Webots simulation."""
