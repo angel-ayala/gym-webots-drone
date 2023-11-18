@@ -13,7 +13,9 @@ setup(
     license='GPL-3.0',
     packages=[package_name],
     # packages=find_packages(),
-    install_requires=['gym==0.26.0', 'simple_pid==2.0.0'],
+    install_requires=['gym==0.26.0',
+                      'simple_pid==2.0.0',
+                      'opencv-python==4.8.1'],
     classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Science/Research',

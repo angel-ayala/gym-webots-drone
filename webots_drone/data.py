@@ -105,33 +105,18 @@ class MultipleCallbacksOnStep:
 class StoreStepData:
     """Callback for save a Gym.state data."""
 
-    def __init__(self, store_path, epsilon=False):
+    def __init__(self, store_path, n_sensors=9, epsilon=False):
         self.store_path = Path(store_path)
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
         if self.store_path.is_file():
             print('WARNING:', self.store_path, 'already exists, overwriting!')
-            
-        state_cols = ['pos_x', 'pos_y', 'pos_z',
-                      'ori_x', 'ori_y', 'ori_z',
-                      'vel_x', 'vel_y', 'vel_z',
-                      'velang_x', 'velang_y', 'velang_z',]
-        # action_cols = ['roll', 'pitch', 'yaw', 'thrust']
-        action_cols = ['action']
-
-        self.data_cols = ['phase', 'ep', 'iteration', 'timestamp']
-        self.data_cols += state_cols
-        self.data_cols += action_cols
-        self.data_cols += ['reward']
-        self.data_cols += state_cols
-        self.data_cols += ['absorbing', 'last']
-        self._idx = 0
+        self.n_sensors = n_sensors
         self.last_state = info2state(None).tolist()
+        self.epsilon = epsilon
         self._phase = 'init'
         self._ep = 0
         self._iteration = 0
-        self.epsilon = epsilon
-        if epsilon is not False:
-            self.data_cols += ['epsilon']
+        self.create_header()
 
     def set_learning(self):
         self._phase = 'learn'
@@ -142,6 +127,47 @@ class StoreStepData:
         self._phase = 'eval'
         self._iteration = 0
         self._ep += 1
+
+    def create_header(self):
+        state_cols = ['pos_x', 'pos_y', 'pos_z',
+                      'ori_x', 'ori_y', 'ori_z',
+                      'vel_x', 'vel_y', 'vel_z',
+                      'velang_x', 'velang_y', 'velang_z',]
+        # action_cols = ['roll', 'pitch', 'yaw', 'thrust']
+        action_cols = ['action']
+
+        data_cols = ['phase', 'ep', 'iteration', 'timestamp']
+        data_cols += state_cols
+        data_cols += action_cols
+        data_cols += ['reward']
+        data_cols += ['next_' + sc for sc in state_cols]
+        data_cols += ['absorbing', 'last']
+
+        if self.epsilon is not False:
+            data_cols += ['epsilon']
+        data_cols += ['penalization', 'final']
+
+        data_cols += ['north_deg']
+        for nid in range(self.n_sensors):
+            data_cols += ['dist_sensor_' + str(nid)]
+
+        data_cols += ['target_pos_x',
+                      'target_pos_y',
+                      'target_pos_z']
+        data_cols += ['rc_pos_x',
+                      'rc_pos_y',
+                      'rc_pos_z']
+        data_cols += ['emitter_pos_x',
+                      'emitter_pos_y',
+                      'emitter_pos_z',
+                      'emitter_strength']
+        data_cols += ['motors_vel_front_left',
+                      'motors_vel_front_right',
+                      'motors_vel_rear_left',
+                      'motors_vel_rear_right']
+        # create file headers
+        with open(self.store_path, 'w') as outfile:
+            outfile.writelines(','.join(data_cols) + '\n')
 
     def __call__(self, sample, info):
         state = info2state(info).tolist()
@@ -161,55 +187,27 @@ class StoreStepData:
         if self.epsilon is not False:
             row.append(self.epsilon.get_value())  # epsilon
 
-        for k, v in info.items():
-            if k in ['position', 'orientation', 'angular_velocity', 'speed'
-                     'image', 'angular_vel', 'timestamp', 'motors_vel',
-                     'emitter', 'rc_position', 'target_position']:
-                continue
+        row.append(info['penalization'])
+        row.append(info['final'])
+        row.append(info['north_deg'])
 
-            if isinstance(v, list):
-                if k not in self.data_cols:
-                    for i in range(len(v)):
-                        self.data_cols.append(k + f"_{i}")
-                row.extend(v)
-            else:
-                if k not in self.data_cols:
-                    self.data_cols.append(k)
-                row.append(v)
+        for nid in range(self.n_sensors):
+            row.append(info['dist_sensors'][nid])
 
-        k = 'target_position'
-        self.data_cols.extend([k + '_x', k + '_y', k + '_z'])
-        row.extend(info[k])
+        row.extend(info['target_position'])
+        row.extend(info['rc_position'])
+        row.extend(info['emitter']['direction'])
+        row.append(info['emitter']['signal_strength'])
+        row.extend(info['motors_vel'])
 
-        k = 'rc_position'
-        self.data_cols.extend([k + '_x', k + '_y', k + '_z'])
-        row.extend(info[k])
-
-        k = 'emitter'
-        self.data_cols.extend([k + '_pos_x', k + '_pos_y', k + '_pos_z',
-                               k + '_strength'])
-        row.extend(info[k]['direction'])
-        row.append(info[k]['signal_strength'])
-
-        k = 'motors_vel'
-        self.data_cols.extend([k + '_front_left',
-                               k + '_front_right',
-                               k + '_rear_left',
-                               k + '_rear_right'])
-        row.extend(info[k])
-
-        if self._idx == 0:  # create output file
-            with open(self.store_path, 'w') as outfile:
-                outfile.writelines(','.join(self.data_cols) + '\n')
-
+        # append data
         with open(self.store_path, 'a') as outfile:
             outfile.writelines(','.join(map(str, row)) + '\n')
 
-        self._idx += 1
         self.last_state = state
-
         if sample[5]:
             self._iteration += 1
+            self.last_state = info2state(None).tolist()
 
 
 class VideoCallback:
