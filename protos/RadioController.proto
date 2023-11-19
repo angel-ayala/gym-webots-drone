@@ -1,0 +1,100 @@
+#VRML_SIM R2023a utf8
+# license: Copyright Angel Ayala. Licensed for research use purpose only.
+# license url: https://www.github.com/angel-ayala/gy-webots-drone
+# tags: static
+# Radio control device to communicate with other devices.
+
+PROTO RadioController [
+  field SFVec3f    translation         0 0 0                               # Is `Transform.translation`.
+  field SFRotation rotation            0 0 1 0                             # Is `Transform.rotation`.
+  field SFString   name                "RCControl"                         # Is `Solid.name`.
+  field SFString   controller          ""                                  # Is `Robot.controller`.
+  field MFString   controllerArgs      []                                  # Is `Robot.controllerArgs`.
+  field SFString   window              "<generic>"                         # Is `Robot.window`.
+  field SFString   customData          ""                                  # Is `Robot.customData`.
+  field SFBool     supervisor          FALSE                               # Is `Robot.supervisor`.
+  field SFBool     synchronization     TRUE                                # Is `Robot.synchronization`.
+  field MFFloat    battery             []                                  # Is `Robot.battery`.
+  field MFNode     bodySlot            []                                  # Extends the robot with new nodes in the turret slot.
+  field SFString   rx_name             "StateReceiver"                     # Is `Receiver.name`.
+  field SFInt32    rx_channel          4                                   # Is `Receiver.name`.
+  field SFString   tx_name             "ActionEmitter"                     # Is `Emitter.name`.
+  field SFInt32    tx_channel          6                                   # Is `Emitter.name`.
+]
+{
+Robot {
+  translation IS translation
+  rotation IS rotation
+  children [
+    Group {
+      children IS bodySlot
+    }
+    Solid {
+      children [
+        Transform {
+          translation 0.1 0.08 0
+          rotation 0 1 0 0
+          children [
+            DEF RCAntenna Shape {
+              appearance Appearance {
+                material Material {
+                  diffuseColor 0.3 0.4 0.9
+                }
+                texture ImageTexture {
+                  url [
+                    "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/default/worlds/textures/plastic.jpg"
+                  ]
+                }
+              }
+              geometry Box {
+                size 0.15 0.01 0.0025
+              }
+            }
+          ]
+        }
+        Transform {
+          translation 0.1 -0.08 0
+          children [
+            USE RCAntenna
+          ]
+        }
+        Shape {
+          appearance Appearance {
+            material Material {
+              emissiveColor 0.4 0.6 1
+            }
+            texture ImageTexture {
+              url [
+                "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/default/worlds/textures/plastic.jpg"
+              ]
+            }
+            name "RCappearance"
+          }
+          geometry Box {
+            size 0.1 0.25 0.02
+          }
+        }
+      ]
+    }
+    Receiver {
+      translation 0.15 0.08 0
+      rotation 0 1 0 0
+      name IS rx_name
+      channel IS rx_channel
+    }
+    Emitter {
+      translation 0.15 -0.08 0
+      name IS tx_name
+      channel IS tx_channel
+    }
+  ]
+  name IS name
+  controller IS controller
+  controllerArgs IS controllerArgs
+  window IS window
+  customData IS customData
+  supervisor IS supervisor
+  synchronization IS synchronization
+  battery IS battery
+}
+}

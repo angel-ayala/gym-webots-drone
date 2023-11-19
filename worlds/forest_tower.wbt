@@ -9,6 +9,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
 EXTERNPROTO "webots://projects/objects/buildings/protos/SmallResidentialTower.proto"
+EXTERNPROTO "../protos/RadioController.proto"
 
 DEF World WorldInfo {
   title "Wildfire scenario"
@@ -19,7 +20,7 @@ DEF World WorldInfo {
   }
 }
 Viewpoint {
-  orientation -0.17157771954700304 0.16987046440011747 0.9704149171769457 1.61081735496436
+  orientation -0.17133181402046713 0.16961806272936963 0.9705025101978828 1.6108247722246791
   position 0.10685001965701016 -10.43822672078715 15.176500155406801
   near 0.2
   follow "Mavic 2 PRO"
@@ -256,18 +257,9 @@ DEF Drone Mavic2Pro {
     }
   ]
 }
-Robot {
-  children [
-    Receiver {
-      name "StateReceiver"
-      channel 4
-    }
-    Emitter {
-      name "ActionEmitter"
-      channel -1
-    }
-  ]
-  name "agent"
+RadioController {
+  translation 4.14588e-08 -2.5 11.37
+  rotation -0.5773509358554485 0.5773489358556708 -0.5773509358554485 -2.094395307179586
   controller "<extern>"
   supervisor TRUE
 }
