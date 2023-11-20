@@ -28,14 +28,20 @@ class DroneEnvDiscrete(DroneEnvContinuous):
                  max_no_action_steps=625,  # 5 sec
                  frame_skip=125,  # 1 sec
                  goal_threshold=5., init_altitude=25.,
-                 altitude_limits=[11, 75]):
+                 altitude_limits=[11, 75],
+                 fire_pos=[-40, 40],
+                 fire_dim=[7, 5],
+                 is_pixels=True):
         super(DroneEnvDiscrete, self).__init__(
             time_limit=time_limit,
             max_no_action_steps=max_no_action_steps,
             frame_skip=frame_skip,
             goal_threshold=goal_threshold,
             init_altitude=init_altitude,
-            altitude_limits=altitude_limits)
+            altitude_limits=altitude_limits,
+            fire_pos=fire_pos,
+            fire_dim=fire_dim,
+            is_pixels=is_pixels)
 
         # Action space discretized, roll, pitch, and yaw only
         self._limits = np.hstack((self.sim.limits[1, :3],

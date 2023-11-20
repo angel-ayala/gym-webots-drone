@@ -13,6 +13,7 @@ from gym import spaces, logger
 from gym.utils import seeding
 
 from webots_drone import WebotsSimulation
+from webots_drone.utils import info2state
 from webots_drone.utils import min_max_norm
 from webots_drone.utils import compute_distance
 from webots_drone.utils import check_flight_area
@@ -36,7 +37,8 @@ class DroneEnvContinuous(gym.Env):
                  init_altitude=25.,
                  altitude_limits=[11, 75],
                  fire_pos=[-40, 40],
-                 fire_dim=[7, 5]):
+                 fire_dim=[7, 5],
+                 is_pixels=True):
         # Simulation controller
         logger.info('Checking Webots connection...')
         self.sim = WebotsSimulation()
@@ -48,42 +50,35 @@ class DroneEnvContinuous(gym.Env):
                                        shape=(self.sim.limits.shape[-1], ),
                                        dtype=np.float32)
         # Observation space
-        # width = self.sim.state_shape[1]
-        # half_height = self.sim.state_shape[0] // 2
-        # hcenter = width // 2
-        # self.center_idx = (hcenter - half_height, hcenter + half_height)
-
-        # Observation space, the drone's camera image
-        self.obs_type = np.uint8
-        # self.obs_shape = (self.sim.image_shape[-1], 84, 84)
-        self.obs_shape = (3, 84, 84)
-        self.observation_space = spaces.Box(low=0,
-                                            high=255,
-                                            shape=self.obs_shape,
-                                            dtype=self.obs_type)
-
+        self.is_pixels = is_pixels
+        if self.is_pixels:
+            # Observation space, the drone's camera image
+            self.obs_shape = (3, 84, 84)
+            self.obs_type = np.uint8
+            self.observation_space = spaces.Box(low=0,
+                                                high=255,
+                                                shape=self.obs_shape,
+                                                dtype=self.obs_type)
+        else:
+            self.obs_shape = (12, )
+            self.obs_type = np.float32
+            self.observation_space = spaces.Box(low=float('-inf'),
+                                                high=float('inf'),
+                                                shape=self.obs_shape,
+                                                dtype=self.obs_type)
         # runtime vars
         self.init_runtime_vars()
-        # self._episode_steps = 0  # time limit control
         self._max_episode_steps = time_limit
-        # self._no_action_steps = 0  # no action control
         self._max_no_action_steps = round(max_no_action_steps / frame_skip)
-        # self._end = False  # episode end flag
         self._frame_skip = frame_skip
         self._reward_lim = [-200 - 50 * (frame_skip - 1), 100 * frame_skip]
-        # self._goal_distance = 0  # reward helper
-        # self.goal_threshold = goal_threshold  # **2
         self._min_goal_distance = self.sim.risk_distance + goal_threshold
         self._fire_pos = fire_pos
         self._fire_dim = fire_dim
-        # self.altitude_limits = altitude_limits
         self.flight_area = self.sim.get_flight_area(altitude_limits)
         self.init_altitude = init_altitude
 
         self.viewer = None
-        # self.last_image = None
-        # self.last_state = None
-        # self.seed()
 
     def init_runtime_vars(self):
         self._episode_steps = 0  # time limit control
@@ -105,7 +100,7 @@ class DroneEnvContinuous(gym.Env):
         return [seed1, seed2]
 
     def preprocess_image(self, img):
-        """Resize and normalize the state."""
+        """BGR2RGB, center crop, and 84x84 resize operations."""
         # make it square from center
         hheight = self.sim.image_shape[0] // 2  # half height
         hcenter = self.sim.image_shape[1] // 2  # half width
@@ -117,18 +112,18 @@ class DroneEnvContinuous(gym.Env):
                             interpolation=cv2.INTER_AREA)
         # channel first
         result = np.swapaxes(result, 2, 0)
-        # normalize
-        # result /= 255.
         return result
 
     def get_state(self):
         """Process the image to get a RGB image."""
         state_data = self.sim.get_data()
-        img = state_data['image'].copy()
-        img = img[:, :, [2, 1, 0]]  # BGR2RGB
-        # self.last_image = img.copy()
-        state = self.preprocess_image(img)
-        del state_data['image']
+        image_rgb = state_data['image'].copy()[:, :, [2, 1, 0]]  # BGR2RGB
+        if self.is_pixels:
+            state = self.preprocess_image(image_rgb)
+            del state_data['image']
+        else:
+            state = info2state(state_data)
+            state_data['image_rgb'] = image_rgb
 
         return state, state_data
 
