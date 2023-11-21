@@ -27,10 +27,11 @@ class DroneEnvDiscrete(DroneEnvContinuous):
     def __init__(self, time_limit=7500,  # 1 min
                  max_no_action_steps=625,  # 5 sec
                  frame_skip=125,  # 1 sec
-                 goal_threshold=5., init_altitude=25.,
+                 goal_threshold=5.,
+                 init_altitude=25.,
                  altitude_limits=[11, 75],
                  fire_pos=[-40, 40],
-                 fire_dim=[7, 5],
+                 fire_dim=[11., 3.5],
                  is_pixels=True):
         super(DroneEnvDiscrete, self).__init__(
             time_limit=time_limit,

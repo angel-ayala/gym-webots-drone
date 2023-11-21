@@ -116,6 +116,8 @@ class WebotsSimulation(Supervisor):
 
         for i in range(forest_shape.getCount()):
             self.forest_area.append(forest_shape.getMFVec2f(i))
+        self.forest_area = np.asarray(self.forest_area)
+
         return self.forest_area
 
     def init_target_node(self):
@@ -173,7 +175,7 @@ class WebotsSimulation(Supervisor):
         """Do a Robot.step(timestep)."""
         self.step(self.timestep)
 
-    def set_fire_dim(self, fire_height=7., fire_radius=5.):
+    def set_fire_dimension(self, fire_height=None, fire_radius=None):
         """
         Set the FireSmoke Node's height and radius.
 
@@ -182,14 +184,22 @@ class WebotsSimulation(Supervisor):
 
         :return float, float: the settled height and radius values.
         """
+        if fire_height is None:
+            fire_height = self.np_random.uniform(2., 13.)
+        if fire_radius is None:
+            fire_radius = self.np_random.uniform(0.5, 3.)
+
         # FireSmoke node fields
-        self.target_node['set_height'](fire_height)
-        self.target_node['set_radius'](fire_radius)
+        self.target_node['set_height'](float(fire_height))
+        self.target_node['set_radius'](float(fire_radius))
 
-        # update position and risk_zone
-        self.set_fire_position(fire_pos=self.target_node['get_pos']())
+        # correct position in Z axis and update risk_distance value
+        fire_pos = self.target_node['get_pos']()
+        fire_pos[2] = fire_height * 0.5  # update height
+        self.target_node['set_pos'](list(fire_pos))
+        self.risk_distance = fire_radius + fire_height * 4
 
-        return fire_height, fire_radius
+        return (fire_height, fire_radius), self.risk_distance
 
     def set_fire_position(self, fire_pos=None):
         """
@@ -203,12 +213,13 @@ class WebotsSimulation(Supervisor):
             Default is None.
         """
         fire_radius = self.target_node['get_radius']()
-        # print(self.forest_area)
+        fire_p = self.target_node['get_pos']()  # current position
         if fire_pos is None:  # randomize position
-            fire_p = self.target_node['get_pos']()  # current position
             # get forest limits
-            X_range = [self.forest_area[3][0], self.forest_area[1][0]]
-            Y_range = [self.forest_area[1][1], self.forest_area[3][1]]
+            X_range = [self.forest_area[:, 0].min(),
+                       self.forest_area[:, 0].max()]
+            Y_range = [self.forest_area[:, 1].min(),
+                       self.forest_area[:, 1].max()]
 
             # randomize position
             fire_p[0] = self.np_random.uniform(fire_radius - abs(X_range[0]),
@@ -216,41 +227,29 @@ class WebotsSimulation(Supervisor):
             fire_p[1] = self.np_random.uniform(fire_radius - abs(Y_range[0]),
                                                Y_range[1] - fire_radius)
         else:
-            fire_p = [fire_pos[0], fire_pos[1], 0]
-
-        fire_height = self.target_node['get_height']()
-        fire_p[2] = fire_height * 0.5  # update height
-        # print('fire_pos', fire_p)
-
-        # FireSmoke node fields
+            fire_p[0] = fire_pos[0]
+            fire_p[1] = fire_pos[1]
+        # set new position
         self.target_node['set_pos'](list(fire_p))
-        self.risk_distance = fire_radius + fire_height * 4
 
-        return fire_p, self.risk_distance
+        return fire_p
 
-    def randomize_fire_position(self):
-        """Randomize the size and position of the FireSmoke node.
-
-        The size and position has value in meters.
-        The height of the node is [2., 13.] and it radius is [0.5, 3.]
-        The position is directly related to the radius, reducing the 2-axis
-        available space and requiring move up given its height.
-        The position is delimited by the forest area.
-        """
-        # randomize dimension
-        fire_height, fire_radius = self.set_fire_dim(
-            fire_height=self.np_random.uniform(2., 13.),
-            fire_radius=self.np_random.uniform(0.5, 3.))
+    def set_fire(self, fire_pos=None, fire_height=None, fire_radius=None):
+        self.set_fire_dimension(fire_height, fire_radius)
+        self.set_fire_position(fire_pos)
 
         # avoid to the fire appears near the drone's initial position
-        n_random = 0
-        while (self.get_target_distance() <= self.risk_distance
-               or n_random == 0):
-            # randomize position
-            fire_pos, self.risk_distance = self.set_fire_position()
-            n_random += 1
-
-        return fire_pos, fire_height, fire_radius, self.risk_distance
+        must_do = 0
+        while self.get_target_distance() <= self.risk_distance:
+            # randomize position offset
+            offset = self.np_random.uniform(0.1, 1.)
+            if must_do % 2 == 0:
+                fire_pos[0] = fire_pos[0] + offset
+                fire_pos[1] = fire_pos[1] - offset
+            else:
+                fire_pos[0] = fire_pos[0] - offset
+                fire_pos[1] = fire_pos[1] + offset
+            self.set_fire_position(fire_pos)
 
     def get_drone_pos(self):
         """Read the current drone position from the node's info."""

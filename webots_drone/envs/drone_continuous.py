@@ -37,7 +37,7 @@ class DroneEnvContinuous(gym.Env):
                  init_altitude=25.,
                  altitude_limits=[11, 75],
                  fire_pos=[-40, 40],
-                 fire_dim=[7, 5],
+                 fire_dim=[11., 3.5],
                  is_pixels=True):
         # Simulation controller
         logger.info('Checking Webots connection...')
@@ -325,8 +325,7 @@ class DroneEnvContinuous(gym.Env):
         # restart simulation
         self.seed(seed)
         self.sim.reset()
-        # randomize fire position
-        self.sim.randomize_fire_position()
+        self.sim.set_fire(self._fire_pos, *self._fire_dim)
         self.sim.play_fast()
         self.sim.sync()
         self.init_runtime_vars()
