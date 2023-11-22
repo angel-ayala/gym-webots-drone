@@ -39,7 +39,7 @@ class DroneEnvContinuous(gym.Env):
                  init_altitude=25.,
                  altitude_limits=[11, 75],
                  fire_pos=[-40, 40],
-                 fire_dim=[11., 3.5],
+                 fire_dim=[7., 3.5],
                  is_pixels=True):
         # Simulation controller
         logger.info('Checking Webots connection...')
@@ -202,7 +202,7 @@ class DroneEnvContinuous(gym.Env):
             self._no_action_steps = 0
         return self._no_action_steps >= self._max_no_action_steps
 
-    def __is_final_state(self, info, curr_distance):
+    def __is_final_state(self, info):
         discount = 0
         end = False
         # no action limit
@@ -217,22 +217,10 @@ class DroneEnvContinuous(gym.Env):
             discount -= 200
             end = True
             info['final'] = 'Flipped'
-        # is_collision
-        elif any(check_collision(info["dist_sensors"])):
-            logger.info(f"[{info['timestamp']}] Final state, Collision")
-            discount -= 200
-            end = True
-            info['final'] = 'Colission'
-        # risk zone trespassing
-        elif curr_distance < self.sim.risk_distance:
-            logger.info(f"[{info['timestamp']}] Final state, Risk zone")
-            discount -= 200
-            end = True
-            info['final'] = 'Risk zone'
 
         return discount, end
 
-    def __compute_penalization(self, info):
+    def __compute_penalization(self, info, curr_distance):
         near_object_threshold = [150 / 4000,  # front left
                                  150 / 4000,  # front right
                                  150 / 3200,  # rear top
@@ -247,15 +235,28 @@ class DroneEnvContinuous(gym.Env):
         # object_near
         if any(check_near_object(info["dist_sensors"],
                                  near_object_threshold)):
+            logger.info(f"[{info['timestamp']}] Warning state, ObjectNear")
             penalization -= 25
-            penalization_str += 'object_near|'
+            penalization_str += 'ObjectNear|'
         # outside flight area
         if any(check_flight_area(info["position"], self.flight_area)):
+            logger.info(f"[{info['timestamp']}] Warning state, OutFlightArea")
             penalization -= 50
-            penalization_str += 'out_flight_area|'
+            penalization_str += 'OutFlightArea|'
+        # is_collision
+        if any(check_collision(info["dist_sensors"])):
+            logger.info(f"[{info['timestamp']}] Warning state, Near2Collision")
+            penalization -= 100
+            penalization_str += 'Near2Collision|'
+        # risk zone trespassing
+        if curr_distance < self.sim.risk_distance:
+            logger.info(f"[{info['timestamp']}] Warning state, InsideRiskZone")
+            penalization -= 200
+            penalization_str += 'InsideRiskZone'
 
         if len(penalization_str) > 0:
             info['penalization'] = penalization_str
+
         return penalization
 
     def compute_reward(self, obs, info):
@@ -271,16 +272,15 @@ class DroneEnvContinuous(gym.Env):
         """
         info['penalization'] = 'no'
         info['final'] = 'no'
-        # compute distance reward
-        goal_distance = self.sim.get_target_distance()
         # terminal states
-        discount, end = self.__is_final_state(info, goal_distance)
+        discount, end = self.__is_final_state(info)
         if end:
             self._end = end
             return discount
 
         # not terminal, must be avoided
-        penalization = self.__compute_penalization(info)
+        goal_distance = self.sim.get_target_distance()
+        penalization = self.__compute_penalization(info, goal_distance)
         if penalization > 0:
             return penalization
 
@@ -293,8 +293,9 @@ class DroneEnvContinuous(gym.Env):
         reward = orientation_reward + distance_reward
 
         # goal achieved
-        if goal_distance < self._min_goal_distance:
-            reward *= 10
+        if (goal_distance < self._min_goal_distance
+                and goal_distance > self.sim.risk_distance):
+            reward = 200
 
         return reward
 
@@ -313,9 +314,9 @@ class DroneEnvContinuous(gym.Env):
         # compute reward
         reward = self.compute_reward(observation, info)  # obtain reward
         # normalize reward
-        reward = min_max_norm(reward, a=-1, b=1,
-                              minx=self._reward_lim[0],
-                              maxx=self._reward_lim[1])
+        # reward = min_max_norm(reward, a=-1, b=1,
+        #                       minx=self._reward_lim[0],
+        #                       maxx=self._reward_lim[1])
         return observation, reward, info
 
     def lift_uav(self, altitude):
