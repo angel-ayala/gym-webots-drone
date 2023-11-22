@@ -20,6 +20,8 @@ from webots_drone.utils import check_flight_area
 from webots_drone.utils import check_collision
 from webots_drone.utils import check_flipped
 from webots_drone.utils import check_near_object
+from webots_drone.reward import compute_orientation_reward
+from webots_drone.reward import compute_distance_reward
 
 
 class DroneEnvContinuous(gym.Env):
@@ -269,9 +271,10 @@ class DroneEnvContinuous(gym.Env):
         """
         info['penalization'] = 'no'
         info['final'] = 'no'
-        curr_distance = self.sim.get_target_distance()
+        # compute distance reward
+        goal_distance = self.sim.get_target_distance()
         # terminal states
-        discount, end = self.__is_final_state(info, curr_distance)
+        discount, end = self.__is_final_state(info, goal_distance)
         if end:
             self._end = end
             return discount
@@ -281,11 +284,16 @@ class DroneEnvContinuous(gym.Env):
         if penalization > 0:
             return penalization
 
-        reward = -1.0 + self._prev_distance - curr_distance
-        self._prev_distance = curr_distance
+        uav_pos, uav_ori = info['position'], info['north_deg']
+        orientation_reward = compute_orientation_reward(
+            uav_pos, uav_ori, self.sim.get_target_pos())
+        distance_reward = compute_distance_reward(
+            uav_pos, self.sim.get_target_pos())
+        reward = orientation_reward + distance_reward
+
         # goal achieved
-        if curr_distance < self._min_goal_distance:
-            reward = 100
+        if goal_distance < self._min_goal_distance:
+            reward *= 10
 
         return reward
 
