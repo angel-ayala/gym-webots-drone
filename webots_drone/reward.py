@@ -36,7 +36,7 @@ def compute_orientation_reward(position, orientation, ref_position):
     return cosine_similarity
 
 
-def compute_distance_reward(position, ref_position, distance_max=25,
+def compute_distance_reward(position, ref_position, distance_max=25.,
                             distance_threshold=5.,
                             threshold_offset=2.):
     curr_distance = compute_distance(position, ref_position)
