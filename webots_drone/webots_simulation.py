@@ -43,7 +43,7 @@ class WebotsSimulation(Supervisor):
         self.image_shape = (240, 400, 4)
         self._data = dict()
         # actions value boundaries
-        self.set_limits()
+        self.limits = self.get_control_ranges()
         # runtime vars
         # self.seed()
         self.init_nodes()
@@ -74,16 +74,16 @@ class WebotsSimulation(Supervisor):
         #     0 if seed is None else seed)
         return seed
 
-    def set_limits(self):
-        """Get the limits to manipulate the angles and altitude."""
-        limits = np.array([np.pi / 12.,     # roll
-                           np.pi / 12.,     # pitch
-                           np.pi,           # yaw
-                           5.               # altitude
-                           ])
-        self.limits = np.array([limits * -1,  # low limist
-                                limits])      # high limits
-        return self
+    @staticmethod
+    def get_control_ranges():
+        """The control limits to manipulate the angles and altitude."""
+        control_ranges = np.array([np.pi / 12.,     # roll
+                                   np.pi / 12.,     # pitch
+                                   np.pi,           # yaw
+                                   5.               # altitude
+                                   ])
+        return np.array([control_ranges * -1,  # low limits
+                         control_ranges])      # high limits
 
     def get_flight_area(self, altitude_limits):
         # rc_pos = self.getSelf().getPosition()

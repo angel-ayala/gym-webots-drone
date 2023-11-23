@@ -22,6 +22,7 @@ from webots_drone.utils import check_flipped
 from webots_drone.utils import check_near_object
 from webots_drone.reward import compute_orientation_reward
 from webots_drone.reward import compute_distance_reward
+from webots_drone.reward import sum_and_normalize as sum_rewards
 
 
 class DroneEnvContinuous(gym.Env):
@@ -47,9 +48,10 @@ class DroneEnvContinuous(gym.Env):
         logger.info('Connected to Webots')
 
         # Action space, the angles and altitud
-        self.action_space = spaces.Box(low=self.sim.limits[0],
-                                       high=self.sim.limits[1],
-                                       shape=(self.sim.limits.shape[-1], ),
+        control_limits = WebotsSimulation.get_control_ranges()
+        self.action_space = spaces.Box(low=control_limits[0],
+                                       high=control_limits[1],
+                                       shape=(control_limits.shape[-1], ),
                                        dtype=np.float32)
         # Observation space
         self.is_pixels = is_pixels
@@ -74,7 +76,7 @@ class DroneEnvContinuous(gym.Env):
         self._max_no_action_steps = round(max_no_action_steps / frame_skip)
         self._frame_skip = frame_skip
         self._reward_lim = [-200 - 50 * (frame_skip - 1), 100 * frame_skip]
-        self._min_goal_distance = self.sim.risk_distance + goal_threshold
+        self._goal_threshold = [self.sim.risk_distance, goal_threshold]
         self._fire_pos = fire_pos
         self._fire_dim = fire_dim
         self.flight_area = self.sim.get_flight_area(altitude_limits)
@@ -208,13 +210,13 @@ class DroneEnvContinuous(gym.Env):
         # no action limit
         if self.__no_action_limit(info["position"]):
             logger.info(f"[{info['timestamp']}] Final state, Same position")
-            discount -= 200 * self._frame_skip
+            discount -= 10.
             end = True
             info['final'] = 'No Action'
         # is_flipped
         elif check_flipped(info["orientation"]):
             logger.info(f"[{info['timestamp']}] Final state, Flipped")
-            discount -= 200
+            discount -= 10.
             end = True
             info['final'] = 'Flipped'
 
@@ -236,22 +238,22 @@ class DroneEnvContinuous(gym.Env):
         if any(check_near_object(info["dist_sensors"],
                                  near_object_threshold)):
             logger.info(f"[{info['timestamp']}] Warning state, ObjectNear")
-            penalization -= 25
+            penalization -= 1
             penalization_str += 'ObjectNear|'
         # outside flight area
         if any(check_flight_area(info["position"], self.flight_area)):
             logger.info(f"[{info['timestamp']}] Warning state, OutFlightArea")
-            penalization -= 50
+            penalization -= 1
             penalization_str += 'OutFlightArea|'
         # is_collision
         if any(check_collision(info["dist_sensors"])):
             logger.info(f"[{info['timestamp']}] Warning state, Near2Collision")
-            penalization -= 100
+            penalization -= 1
             penalization_str += 'Near2Collision|'
         # risk zone trespassing
         if curr_distance < self.sim.risk_distance:
             logger.info(f"[{info['timestamp']}] Warning state, InsideRiskZone")
-            penalization -= 200
+            penalization -= 1
             penalization_str += 'InsideRiskZone'
 
         if len(penalization_str) > 0:
@@ -289,13 +291,11 @@ class DroneEnvContinuous(gym.Env):
         orientation_reward = compute_orientation_reward(
             uav_pos[:2], uav_ori, self.sim.get_target_pos()[:2])
         distance_reward = compute_distance_reward(
-            uav_pos[:2], self.sim.get_target_pos()[:2])
-        reward = orientation_reward + distance_reward
-
-        # goal achieved
-        if (goal_distance < self._min_goal_distance
-                and goal_distance > self.sim.risk_distance):
-            reward = 200
+            uav_pos[:2], self.sim.get_target_pos()[:2],
+            distance_max=25.,
+            distance_threshold=self._goal_threshold[0],
+            threshold_offset=self._goal_threshold[1])
+        reward = sum_rewards(orientation_reward, distance_reward)
 
         return reward
 

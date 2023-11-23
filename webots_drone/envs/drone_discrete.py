@@ -9,6 +9,7 @@ import numpy as np
 from gym import spaces
 
 from webots_drone.envs import DroneEnvContinuous
+from webots_drone.webots_simulation import WebotsSimulation
 
 
 def get_one_hot(targets, nb_classes):
@@ -45,28 +46,34 @@ class DroneEnvDiscrete(DroneEnvContinuous):
             is_pixels=is_pixels)
 
         # Action space discretized, roll, pitch, and yaw only
-        self._limits = np.hstack((self.sim.limits[1, :3],
-                                 self.sim.limits[0, :3][::-1]))
+        control_limits = WebotsSimulation.get_control_ranges()
+        self._limits = np.hstack((control_limits[1, :3],
+                                  control_limits[0, :3][::-1]))
         # add 1 for no action
         self.action_space = spaces.Discrete(n=self._limits.shape[-1] + 1)
-        self.no_action = self.sim.limits[0] * 0
 
-    def action_map(self, action):
+    @staticmethod
+    def discrete2continuous(action):
+        control_limits = WebotsSimulation.get_control_ranges()
+        limits = np.hstack((control_limits[1, :3],
+                            control_limits[0, :3][::-1]))
+        n_total = limits.shape[-1] + 1
+
         if action == 0:  # no action
-            return self.no_action
+            return WebotsSimulation.get_control_ranges()[1] * 0.
         else:
             action -= 1  # reduce the no action
         # Discrete to Box without no action
-        encoded = get_one_hot([action], self.action_space.n - 1)
-        encoded = self._limits * encoded[0]
+        encoded = get_one_hot([action], n_total - 1)
+        encoded = limits * encoded[0]
         # roll, pitch, yaw and altitud
-        decoded = encoded.reshape((2, self.action_space.n // 2))[::-1]  # l, h
+        decoded = encoded.reshape((2, n_total // 2))[::-1]  # l, h
         decoded[0] = decoded[0][::-1]  # back order
         decoded = np.hstack((decoded.sum(axis=0), [0]))  # append altitude
         return decoded
 
     def step(self, action):
         """Do an action step inside the Webots simulator."""
-        mapped_action = self.action_map(action)
+        mapped_action = self.discrete2continuous(action)
 
         return super(DroneEnvDiscrete, self).step(mapped_action)
