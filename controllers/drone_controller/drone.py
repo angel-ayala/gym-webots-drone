@@ -133,7 +133,7 @@ class Drone:
         speed = self.gps.getSpeedVector()
         compass = self.compass.getValues()
         north_deg = np.arctan2(compass[0], compass[1])
-        north_deg = (north_deg - 1.5708) / np.pi * 180
+        north_deg = north_deg / np.pi * 180
 
         if north_deg < 0.:
             north_deg += 360.
