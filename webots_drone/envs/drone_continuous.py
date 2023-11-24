@@ -253,8 +253,8 @@ class DroneEnvContinuous(gym.Env):
         # risk zone trespassing
         if curr_distance < self.sim.risk_distance:
             logger.info(f"[{info['timestamp']}] Warning state, InsideRiskZone")
-            penalization -= 1
-            penalization_str += 'InsideRiskZone'
+            # penalization -= 1
+            # penalization_str += 'InsideRiskZone'
 
         if len(penalization_str) > 0:
             info['penalization'] = penalization_str
@@ -290,7 +290,7 @@ class DroneEnvContinuous(gym.Env):
         uav_xy, uav_ori = info['position'][:2], info['north_deg']
         target_xy = self.sim.get_target_pos()[:2]
         # from [-1, 1] to [0, 2 * pi]
-        uav_ori += 2
+        uav_ori += 1
         uav_ori *= np.pi
         # compute reward components
         orientation_reward = compute_orientation_reward(uav_xy, uav_ori,
