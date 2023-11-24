@@ -7,8 +7,11 @@ Created on Mon Nov 13 19:11:59 2023
 """
 import json
 import pandas as pd
+import numpy as np
 from pathlib import Path
 from webots_drone.utils import info2state
+from webots_drone.webots_simulation import WebotsSimulation
+from webots_drone.envs.drone_discrete import DroneEnvDiscrete
 
 
 class SetEpisode:
@@ -111,12 +114,14 @@ class StoreStepData:
         if self.store_path.is_file():
             print('WARNING:', self.store_path, 'already exists, overwriting!')
         self.n_sensors = n_sensors
-        self.last_state = info2state(None).tolist()
         self.epsilon = epsilon
         self._phase = 'init'
         self._ep = 0
         self._iteration = 0
         self.create_header()
+
+    def set_init_state(self, state, info):
+        self.last_state = info2state(info).tolist()
 
     def set_learning(self):
         self._phase = 'learn'
@@ -207,7 +212,72 @@ class StoreStepData:
         self.last_state = state
         if sample[5]:
             self._iteration += 1
-            self.last_state = info2state(None).tolist()
+
+
+class EpisodeData:
+    def __init__(self, history_path):
+        self.history_path = Path(history_path)
+        self.history_df = pd.read_csv(history_path)
+
+    def get_tuple_control(self, filtered_df):
+        state_cols = ['pos_x', 'pos_y', 'pos_z',
+                      'ori_x', 'ori_y', 'ori_z',
+                      'vel_x', 'vel_y', 'vel_z',
+                      'velang_x', 'velang_y', 'velang_z',]
+        action_cols = ['action']
+        next_state_cols = ['next_' + sc for sc in state_cols]
+        state_data = filtered_df[state_cols].to_numpy()
+        next_state_data = filtered_df[next_state_cols].to_numpy()
+        actions_data = np.zeros((len(filtered_df), 4))
+        for i, (idx, row) in enumerate(filtered_df.iterrows()):
+            actions_data[i] = DroneEnvDiscrete.discrete2continuous(
+                row['action'])
+        return state_data, actions_data, next_state_data
+
+    def get_trajectory_df(self, episode, iteration):
+        ep_idxs = self.history_df['ep'] == episode
+        iter_idxs = self.history_df['iteration'] == iteration
+        filtered_df = self.history_df[np.logical_and(ep_idxs, iter_idxs)]
+        return filtered_df
+
+    def get_ep_trajectories(self, episode, iterations=None):
+        episode_df = self.history_df[self.history_df['ep'] == episode]
+        if iterations is None:
+            iterations = episode_df['iteration'].unique().tolist()
+        if type(iterations) != list:
+            iterations = [iterations]
+        trajectories = list()
+        for i in iterations:
+            trajectory_df = self.get_trajectory_df(episode, i)
+            trajectory_length = len(trajectory_df)
+            steps_reward = trajectory_df['reward']
+            steps_stamp = trajectory_df['timestamp']
+            trajectory_ori = trajectory_df['north_deg']
+            trajectory_target = trajectory_df[['target_pos_x',
+                                               'target_pos_y',
+                                               'target_pos_z']]
+            s, a, s_t1 = self.get_tuple_control(trajectory_df)
+            trajectories.append((trajectory_length,
+                                 s_t1[0, :3],  # initial pos
+                                 trajectory_target.head(1).to_numpy()[0], # target
+                                 steps_stamp.to_numpy(),  # timemarks
+                                 steps_reward.to_numpy(),  # rewards
+                                 trajectory_ori.to_numpy(),  # orientation
+                                 s,  # state
+                                 a,  # action
+                                 s_t1))  # next state
+
+        return trajectories
+    
+    def iter_trajectory(self, trajectory):
+        state, action, next_state = trajectory
+        x_t = None
+        u_t = None
+        for step in range(len(state)):
+            x_t = state[step] if step == 0 else state[step] - next_state[step]
+            yield x_t, u_t
+            u_t = action[step].copy()
+            
 
 
 class VideoCallback:
@@ -244,3 +314,20 @@ class VideoCallback:
         if sample[5]:
             self._iteration += 1
             self._stop_recording()
+
+
+if __name__ == '__main__':
+    experiment_path = Path('logs/test_2023-11-21_13-04-15/history.csv')
+    ep_data = EpisodeData(experiment_path)
+    trajectory_data = ep_data.get_ep_trajectories(0, [0])
+    trajectory = trajectory_data[0]
+    path_length, init_pos, target_pos, times, rewards, orientation = trajectory[:6]
+    print('Trajectory with ', path_length, 'steps length, with ',
+          rewards.sum(), 'of reward')
+    print('\tfrom:', init_pos, 'to', target_pos)
+    print('\ttimes:', times[0], 's - ', times[-1], 's',
+          'total:', times[-1] - times[0], 'seconds')
+    for trj in ep_data.iter_trajectory(trajectory[-3:]):
+        pos, ang, speed, ang_vel = trj[0].reshape((4, 3))
+        action = trj[1]
+        print(pos, action)
