@@ -287,11 +287,10 @@ class DroneEnvContinuous(gym.Env):
             return penalization
 
         # 2 dimension considered
-        uav_xy, uav_ori = info['position'][:2], info['north_deg']
+        uav_xy = info['position'][:2]
         target_xy = self.sim.get_target_pos()[:2]
-        # from [-1, 1] to [0, 2 * pi]
-        uav_ori += 1
-        uav_ori *= np.pi
+        # orientation values from [-1, 1] to [0, 2 * pi]
+        uav_ori = (info['north_deg'] + 1.) * np.pi
         # compute reward components
         orientation_reward = compute_orientation_reward(uav_xy, uav_ori,
                                                         target_xy)
