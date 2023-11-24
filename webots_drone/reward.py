@@ -8,7 +8,6 @@ Created on Wed Nov 22 11:35:08 2023
 
 import numpy as np
 from webots_drone.utils import compute_distance
-from webots_drone.utils import min_max_norm
 
 
 def compute_direction_vector(position, orientation, ref_position):
@@ -36,9 +35,9 @@ def compute_orientation_reward(position, orientation, ref_position):
     return cosine_similarity
 
 
-def compute_distance_reward(position, ref_position, distance_max=25.,
-                            distance_threshold=5.,
-                            threshold_offset=2.):
+def compute_distance_reward(position, ref_position, distance_max=50.,
+                            distance_threshold=25.,
+                            threshold_offset=5.):
     curr_distance = compute_distance(position, ref_position)
 
     if curr_distance < distance_threshold - threshold_offset:
@@ -91,6 +90,12 @@ if __name__ == '__main__':
         plt.xlabel('Position X')
         plt.ylabel('Position Y')
         plt.title('Reward Heatmap considering Position (X, Y) and Orientation')
+        # Calculate vector components
+        headings_rad = np.linspace(0, 2 * np.pi, num=100)
+        dx = np.cos(headings_rad)
+        dy = np.sin(headings_rad)
+        plt.quiver(x_grid[1], y_grid[1], dx, dy, angles='xy', scale_units='xy', scale=1)
+        plt.grid()
         plt.show()
 
     # Define the range of positions and orientations

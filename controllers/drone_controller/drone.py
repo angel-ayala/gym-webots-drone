@@ -133,10 +133,6 @@ class Drone:
         speed = self.gps.getSpeedVector()
         compass = self.compass.getValues()
         north_deg = np.arctan2(compass[0], compass[1])
-        north_deg = north_deg / np.pi * 180
-
-        if north_deg < 0.:
-            north_deg += 360.
 
         return orientation, angular_velocity, position, speed, north_deg
 

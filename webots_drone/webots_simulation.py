@@ -17,7 +17,7 @@ from webots_drone.utils import emitter_send_json
 from webots_drone.utils import decode_image
 from webots_drone.utils import min_max_norm
 from webots_drone.utils import compute_distance
-from webots_drone.utils import compute_flight_area
+from webots_drone.utils import preprocess_orientation
 
 
 # Webots environment controller
@@ -299,6 +299,8 @@ class WebotsSimulation(Supervisor):
         orientation[2] = min_max_norm(orientation[2],  # yaw
                                       a=-1, b=1,
                                       minx=-np.pi, maxx=np.pi)
+        # Apply offset and preprocess orientation
+        north_deg = preprocess_orientation(north_deg)
 
         # Normalize distance sensor values
         for idx, sensor in uav_state['dist_sensors'].items():
@@ -308,11 +310,6 @@ class WebotsSimulation(Supervisor):
                                  a=0, b=1,
                                  minx=sensor[1], maxx=sensor[2])
             dist_sensors.append(s_val)
-
-        # Normalize north degree
-        north_deg = min_max_norm(north_deg,
-                                  a=-1, b=1,
-                                  minx=0, maxx=360)
 
         if type(uav_state['image']) == str and uav_state['image'] == "NoImage":
             img = np.zeros(self.image_shape)

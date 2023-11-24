@@ -9,6 +9,15 @@ import base64
 import numpy as np
 
 
+def preprocess_orientation(orientation):
+    # Convert from [-pi, pi] to [0, 2]
+    proc_ori = (orientation / np.pi) + 1.
+    # apply offset and normalize to [0, 2pi]
+    return min_max_norm(proc_ori - 1,
+                        a=0, b=2*np.pi,
+                        minx=0, maxx=2)
+
+
 def info2state(info):
     state = np.zeros((12, ), dtype=np.float32)
     if info is not None:

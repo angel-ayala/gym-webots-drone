@@ -290,12 +290,12 @@ class DroneEnvContinuous(gym.Env):
         uav_xy = info['position'][:2]
         target_xy = self.sim.get_target_pos()[:2]
         # orientation values from [-1, 1] to [0, 2 * pi]
-        uav_ori = (info['north_deg'] + 1.) * np.pi
+        uav_ori = info['north_deg']
         # compute reward components
         orientation_reward = compute_orientation_reward(uav_xy, uav_ori,
                                                         target_xy)
         distance_reward = compute_distance_reward(
-            uav_xy, target_xy, distance_max=25.,
+            uav_xy, target_xy, distance_max=50.,
             distance_threshold=np.sum(self._goal_threshold),
             threshold_offset=self._goal_threshold[1])
         reward = sum_rewards(orientation_reward, distance_reward)
