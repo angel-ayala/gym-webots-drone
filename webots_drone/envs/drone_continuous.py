@@ -14,7 +14,6 @@ from gym.utils import seeding
 
 from webots_drone import WebotsSimulation
 from webots_drone.utils import info2state
-from webots_drone.utils import min_max_norm
 from webots_drone.utils import compute_distance
 from webots_drone.utils import check_flight_area
 from webots_drone.utils import check_collision
@@ -131,68 +130,6 @@ class DroneEnvContinuous(gym.Env):
 
         return state, state_data
 
-    def constrained_action(self, action):
-        """Check drone position and orientation to keep inside FlightArea."""
-        # clip action values
-        action_clip = np.clip(action, self.sim.limits[0], self.sim.limits[1])
-        roll_angle, pitch_angle, yaw_angle, altitude = action_clip
-
-        info = self.sim.get_data()
-        # check area contraints
-        north_deg = info["north_deg"]
-        out_area = check_flight_area(info["position"], self.flight_area)
-
-        orientation = [north_deg > 0.5 or north_deg < -0.5,     # north
-                       north_deg < 0.5 and north_deg > -0.5,    # south
-                       north_deg > 0.,                          # east
-                       north_deg < 0.]                          # west
-        movement = [pitch_angle > 0.,  # north - forward
-                    pitch_angle < 0.,  # south - backward
-                    roll_angle > 0.,   # east - right
-                    roll_angle < 0.]   # west - left
-
-        if out_area[0]:
-            if ((orientation[0] and movement[0])
-                    or (orientation[1] and movement[1])):  # N,S
-                pitch_angle = 0.
-
-            if ((orientation[2] and movement[3])
-                    or (orientation[3] and movement[2])):  # E,W
-                roll_angle = 0.
-
-        if out_area[1]:
-            if ((orientation[0] and movement[1])
-                    or (orientation[1] and movement[0])):  # N,S
-                pitch_angle = 0.
-
-            if ((orientation[2] and movement[2])
-                    or (orientation[3] and movement[3])):  # E,W
-                roll_angle = 0.
-
-        if out_area[2]:
-            if ((orientation[0] and movement[2])
-                    or (orientation[1] and movement[3])):  # N,S
-                roll_angle = 0.
-
-            if ((orientation[2] and movement[0])
-                    or (orientation[3] and movement[1])):  # E,W
-                pitch_angle = 0.
-
-        if out_area[3]:
-            if ((orientation[0] and movement[3])
-                    or (orientation[1] and movement[2])):  # N,S
-                roll_angle = 0.
-
-            if ((orientation[2] and movement[1])
-                    or (orientation[3] and movement[0])):  # E,W
-                pitch_angle = 0.
-
-        if ((out_area[4] and altitude > 0)  # ascense
-                or (out_area[5] and altitude < 0)):  # descense
-            altitude = 0.
-
-        return roll_angle, pitch_angle, yaw_angle, altitude
-
     def __no_action_limit(self, position):
         # diff_pos = compute_distance(position, self.last_state[:3])
         if len(self.last_info.keys()) == 0:
@@ -290,7 +227,7 @@ class DroneEnvContinuous(gym.Env):
         uav_xy = info['position'][:2]
         target_xy = self.sim.get_target_pos()[:2]
         # orientation values from [-1, 1] to [0, 2 * pi]
-        uav_ori = info['north_deg']
+        uav_ori = info['north_rad']
         # compute reward components
         orientation_reward = compute_orientation_reward(uav_xy, uav_ori,
                                                         target_xy)
@@ -308,7 +245,7 @@ class DroneEnvContinuous(gym.Env):
         return self._episode_steps >= self._max_episode_steps
 
     def perform_action(self, action):
-        constrained_action = self.constrained_action(action)
+        constrained_action = self.sim.clip_action(action, self.flight_area)
         # perform action
         command = dict(disturbances=constrained_action)
         self.sim.send_data(command)

@@ -5,19 +5,21 @@ Created on Thu May 28 19:19:44 2020
 
 @author: Angel Ayala <angel4ayala [at] gmail.com>
 """
+import numpy as np
+import traceback
 import os
 import sys
-sys.path.append(os.environ['WEBOTS_HOME'] + "/lib/controller/python")
-import traceback
-import numpy as np
-from controller import Supervisor
 
-from webots_drone.utils import receiver_get_json
-from webots_drone.utils import emitter_send_json
-from webots_drone.utils import decode_image
-from webots_drone.utils import min_max_norm
-from webots_drone.utils import compute_distance
+from webots_drone.utils import check_flight_area
 from webots_drone.utils import preprocess_orientation
+from webots_drone.utils import compute_distance
+from webots_drone.utils import min_max_norm
+from webots_drone.utils import decode_image
+from webots_drone.utils import emitter_send_json
+from webots_drone.utils import receiver_get_json
+
+sys.path.append(os.environ['WEBOTS_HOME'] + "/lib/controller/python")
+from controller import Supervisor
 
 
 # Webots environment controller
@@ -85,7 +87,7 @@ class WebotsSimulation(Supervisor):
         return np.array([control_ranges * -1,  # low limits
                          control_ranges])      # high limits
 
-    def get_flight_area(self, altitude_limits):
+    def get_flight_area(self, altitude_limits=[11, 75]):
         # rc_pos = self.getSelf().getPosition()
         # offset = [[50, 50, altitude_limits[0]],
         #           [50, 40, altitude_limits[1]]]
@@ -132,7 +134,7 @@ class WebotsSimulation(Supervisor):
             set_height=target_node.getField('fireHeight').setSFFloat,
             set_radius=target_node.getField('fireRadius').setSFFloat,
             set_pos=target_node.getField('translation').setSFVec3f
-            )
+        )
         self.risk_distance = self.target_node['get_radius']() +\
             self.target_node['get_height']() * 4
 
@@ -143,7 +145,7 @@ class WebotsSimulation(Supervisor):
             node=drone_node,
             get_pos=lambda: np.array(
                 drone_node.getField('translation').getSFVec3f())
-            )
+        )
 
     def init_nodes(self):
         """Initialize the target and drone nodes' information."""
@@ -358,6 +360,70 @@ class WebotsSimulation(Supervisor):
             traceback.print_tb(e.__traceback__)
             print(e)
 
+    def clip_action(self, action, flight_area):
+        """Check drone position and orientation to keep inside FlightArea."""
+        # clip action values
+        action_clip = np.clip(action, self.limits[0], self.limits[1])
+        roll_angle, pitch_angle, yaw_angle, altitude = action_clip
+
+        # check area contraints
+        info = self.get_data()
+        north_rad = info["north_rad"]
+        out_area = check_flight_area(info["position"], flight_area)
+
+        is_north = north_rad > np.pi * 3/2 or north_rad < np.pi / 2  # north
+        is_east = north_rad > np.pi
+        orientation = [is_north,        # north
+                       not is_north,    # south
+                       is_east,         # east
+                       not is_east]     # west
+        movement = [pitch_angle > 0.,  # north - forward
+                    pitch_angle < 0.,  # south - backward
+                    roll_angle > 0.,   # east - right
+                    roll_angle < 0.]   # west - left
+
+        if out_area[0]:
+            if ((orientation[0] and movement[0])
+                    or (orientation[1] and movement[1])):  # N,S
+                pitch_angle = 0.
+
+            if ((orientation[2] and movement[3])
+                    or (orientation[3] and movement[2])):  # E,W
+                roll_angle = 0.
+
+        if out_area[1]:
+            if ((orientation[0] and movement[1])
+                    or (orientation[1] and movement[0])):  # N,S
+                pitch_angle = 0.
+
+            if ((orientation[2] and movement[2])
+                    or (orientation[3] and movement[3])):  # E,W
+                roll_angle = 0.
+
+        if out_area[2]:
+            if ((orientation[0] and movement[2])
+                    or (orientation[1] and movement[3])):  # N,S
+                roll_angle = 0.
+
+            if ((orientation[2] and movement[0])
+                    or (orientation[3] and movement[1])):  # E,W
+                pitch_angle = 0.
+
+        if out_area[3]:
+            if ((orientation[0] and movement[3])
+                    or (orientation[1] and movement[2])):  # N,S
+                roll_angle = 0.
+
+            if ((orientation[2] and movement[1])
+                    or (orientation[3] and movement[0])):  # E,W
+                pitch_angle = 0.
+
+        if ((out_area[4] and altitude > 0)  # ascense
+                or (out_area[5] and altitude < 0)):  # descense
+            altitude = 0.
+
+        return roll_angle, pitch_angle, yaw_angle, altitude
+
 
 if __name__ == '__main__':
     import cv2
@@ -427,33 +493,32 @@ if __name__ == '__main__':
                     roll_angle = controller.limits[1][0]
                 # pitch
                 elif key == kb.UP:
-                    pitch_angle = controller.limits[0][1]
-                elif key == kb.DOWN:
                     pitch_angle = controller.limits[1][1]
+                elif key == kb.DOWN:
+                    pitch_angle = controller.limits[0][1]
                 # yaw
                 elif key == ord('D'):
                     yaw_angle = controller.limits[0][2]
                 elif key == ord('A'):
                     yaw_angle = controller.limits[1][2]
                 # altitude
-                elif key == ord('S'):
-                    altitude = controller.limits[0][3]  # * 0.1
                 elif key == ord('W'):
                     altitude = controller.limits[1][3]  # * 0.1
+                elif key == ord('S'):
+                    altitude = controller.limits[0][3]  # * 0.1
                 # quit
                 elif key == ord('Q'):
                     print('Terminated')
                     run_flag = False
                 key = kb.getKey()
 
-            action = dict(disturbances=[
-                roll_angle,
-                pitch_angle,
-                yaw_angle,
-                altitude
-            ])
+            action = [roll_angle, pitch_angle, yaw_angle, altitude]
+            action = controller.clip_action(action,
+                                            controller.get_flight_area())
+
+            disturbances = dict(disturbances=action)
             # perform action
-            controller.send_data(action)
+            controller.send_data(disturbances)
 
             # capture state
             state_data = controller.get_data()
