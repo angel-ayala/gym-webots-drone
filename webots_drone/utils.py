@@ -10,12 +10,10 @@ import numpy as np
 
 
 def preprocess_orientation(orientation):
-    # Convert from [-pi, pi] to [0, 2]
-    proc_ori = (orientation / np.pi) + 1.
-    # apply offset and normalize to [0, 2pi]
-    return min_max_norm(proc_ori - 1,
-                        a=0, b=2*np.pi,
-                        minx=0, maxx=2)
+    # Convert from [-pi, pi] to [0, 2pi]
+    if orientation < 0:
+        orientation += 2 * np.pi
+    return orientation
 
 
 def info2state(info):
@@ -99,8 +97,8 @@ def decode_image(raw_image):
 def check_flight_area(uav_pos, flight_area):
     """Check if the uav_pos is outside the flight_area."""
     # X axis check
-    north = uav_pos[0] < flight_area[0][0]
-    south = uav_pos[0] > flight_area[1][0]
+    north = uav_pos[0] > flight_area[1][0]
+    south = uav_pos[0] < flight_area[0][0]
     # Y axis check
     east = uav_pos[1] < flight_area[0][1]
     west = uav_pos[1] > flight_area[1][1]

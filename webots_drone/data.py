@@ -152,7 +152,7 @@ class StoreStepData:
             data_cols += ['epsilon']
         data_cols += ['penalization', 'final']
 
-        data_cols += ['north_deg']
+        data_cols += ['north_rad']
         for nid in range(self.n_sensors):
             data_cols += ['dist_sensor_' + str(nid)]
 
@@ -194,7 +194,7 @@ class StoreStepData:
 
         row.append(info['penalization'])
         row.append(info['final'])
-        row.append(info['north_deg'])
+        row.append(info['north_rad'])
 
         for nid in range(self.n_sensors):
             row.append(info['dist_sensors'][nid])
@@ -252,7 +252,7 @@ class EpisodeData:
             trajectory_length = len(trajectory_df)
             steps_reward = trajectory_df['reward']
             steps_stamp = trajectory_df['timestamp']
-            trajectory_ori = trajectory_df['north_deg']
+            trajectory_ori = trajectory_df['north_rad']
             trajectory_target = trajectory_df[['target_pos_x',
                                                'target_pos_y',
                                                'target_pos_z']]

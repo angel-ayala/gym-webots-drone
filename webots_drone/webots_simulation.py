@@ -236,7 +236,7 @@ class WebotsSimulation(Supervisor):
 
     def set_fire(self, fire_pos=None, fire_height=None, fire_radius=None):
         self.set_fire_dimension(fire_height, fire_radius)
-        self.set_fire_position(fire_pos)
+        new_fire_pos = self.set_fire_position(fire_pos)
 
         # avoid to the fire appears near the drone's initial position
         must_do = 0
@@ -244,12 +244,12 @@ class WebotsSimulation(Supervisor):
             # randomize position offset
             offset = self.np_random.uniform(0.1, 1.)
             if must_do % 2 == 0:
-                fire_pos[0] = fire_pos[0] + offset
-                fire_pos[1] = fire_pos[1] - offset
+                new_fire_pos[0] = new_fire_pos[0] + offset
+                new_fire_pos[1] = new_fire_pos[1] - offset
             else:
-                fire_pos[0] = fire_pos[0] - offset
-                fire_pos[1] = fire_pos[1] + offset
-            self.set_fire_position(fire_pos)
+                new_fire_pos[0] = new_fire_pos[0] - offset
+                new_fire_pos[1] = new_fire_pos[1] + offset
+            self.set_fire_position(new_fire_pos)
 
     def get_drone_pos(self):
         """Read the current drone position from the node's info."""
@@ -286,7 +286,7 @@ class WebotsSimulation(Supervisor):
         angular_velocity = uav_state['angular_velocity']
         position = uav_state['position']
         speed = uav_state['speed']
-        north_deg = uav_state['north']
+        north_rad = uav_state['north']
         dist_sensors = list()
 
         # Normalize angular values
@@ -300,7 +300,7 @@ class WebotsSimulation(Supervisor):
                                       a=-1, b=1,
                                       minx=-np.pi, maxx=np.pi)
         # Apply offset and preprocess orientation
-        north_deg = preprocess_orientation(north_deg)
+        north_rad = preprocess_orientation(north_rad)
 
         # Normalize distance sensor values
         for idx, sensor in uav_state['dist_sensors'].items():
@@ -321,7 +321,7 @@ class WebotsSimulation(Supervisor):
                           angular_velocity=angular_velocity,
                           position=position,
                           speed=speed,
-                          north_deg=north_deg,
+                          north_rad=north_rad,
                           dist_sensors=dist_sensors,
                           motors_vel=uav_state['motors_vel'],
                           image=img,
@@ -404,7 +404,7 @@ if __name__ == '__main__':
 
         # Start simulation with random FireSmoke position
         controller.seed()
-        controller.randomize_fire_position()
+        controller.set_fire()
         controller.play()
         controller.sync()
         run_flag = True

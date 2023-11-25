@@ -132,9 +132,9 @@ class Drone:
         position = self.gps.getValues()
         speed = self.gps.getSpeedVector()
         compass = self.compass.getValues()
-        north_deg = np.arctan2(compass[0], compass[1])
+        north_rad = np.arctan2(compass[0], compass[1])
 
-        return orientation, angular_velocity, position, speed, north_deg
+        return orientation, angular_velocity, position, speed, north_rad
 
     def get_image(self):
         """Get the Camera node image with size and channels.
