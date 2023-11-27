@@ -279,8 +279,8 @@ class DroneEnvContinuous(gym.Env):
         self.sim.set_fire(self._fire_pos, *self._fire_dim)
         self.sim.play_fast()
         self.sim.sync()
-        self.init_runtime_vars()
         self.lift_uav(self.init_altitude)
+        self.init_runtime_vars()
         self.last_state, self.last_info = self.get_state()
 
         return self.last_state, self.last_info
