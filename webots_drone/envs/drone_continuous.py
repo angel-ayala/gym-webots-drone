@@ -145,7 +145,6 @@ class DroneEnvContinuous(gym.Env):
             self._no_action_steps += 1
         else:
             self._no_action_steps = 0
-        print(self._no_action_steps, self._max_no_action_steps)
         return self._no_action_steps >= self._max_no_action_steps
 
     def __is_final_state(self, info):
