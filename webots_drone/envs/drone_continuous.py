@@ -24,6 +24,11 @@ from webots_drone.reward import compute_distance_reward
 from webots_drone.reward import sum_and_normalize as sum_rewards
 
 
+def seconds2steps(seconds, frame_skip, step_time):
+    total_step_time = frame_skip * step_time
+    return int(seconds * 1000 / total_step_time)
+
+
 class DroneEnvContinuous(gym.Env):
     """Gym enviroment to control the Fire scenario in the Webots simulator."""
 
@@ -32,8 +37,8 @@ class DroneEnvContinuous(gym.Env):
         # 'video.frames_per_second' : 30
     }
 
-    def __init__(self, time_limit=7500,  # 1 min
-                 max_no_action_steps=625,  # 5 sec
+    def __init__(self, time_limit_seconds=60,  # 1 min
+                 max_no_action_seconds=5,  # 5 sec
                  frame_skip=125,  # 1 sec
                  goal_threshold=5.,
                  init_altitude=25.,
@@ -71,10 +76,11 @@ class DroneEnvContinuous(gym.Env):
                                                 dtype=self.obs_type)
         # runtime vars
         self.init_runtime_vars()
-        self._max_episode_steps = time_limit
-        self._max_no_action_steps = round(max_no_action_steps / frame_skip)
+        self._max_episode_steps = seconds2steps(time_limit_seconds, frame_skip,
+                                                self.sim.timestep)
+        self._max_no_action_steps = seconds2steps(max_no_action_seconds, 1,
+                                                  self.sim.timestep)
         self._frame_skip = frame_skip
-        self._reward_lim = [-200 - 50 * (frame_skip - 1), 100 * frame_skip]
         self._goal_threshold = [self.sim.risk_distance, goal_threshold]
         self._fire_pos = fire_pos
         self._fire_dim = fire_dim
@@ -136,9 +142,10 @@ class DroneEnvContinuous(gym.Env):
             return False
         diff_pos = compute_distance(position, self.last_info['position'])
         if diff_pos <= 0.01:
-            self._no_action_steps += 1 / self._frame_skip
+            self._no_action_steps += 1
         else:
             self._no_action_steps = 0
+        print(self._no_action_steps, self._max_no_action_steps)
         return self._no_action_steps >= self._max_no_action_steps
 
     def __is_final_state(self, info):
@@ -191,7 +198,7 @@ class DroneEnvContinuous(gym.Env):
         if curr_distance < self.sim.risk_distance:
             logger.info(f"[{info['timestamp']}] Warning state, InsideRiskZone")
             # penalization -= 1
-            # penalization_str += 'InsideRiskZone'
+            penalization_str += 'InsideRiskZone'
 
         if len(penalization_str) > 0:
             info['penalization'] = penalization_str
@@ -226,7 +233,6 @@ class DroneEnvContinuous(gym.Env):
         # 2 dimension considered
         uav_xy = info['position'][:2]
         target_xy = self.sim.get_target_pos()[:2]
-        # orientation values from [-1, 1] to [0, 2 * pi]
         uav_ori = info['north_rad']
         # compute reward components
         orientation_reward = compute_orientation_reward(uav_xy, uav_ori,
@@ -253,10 +259,6 @@ class DroneEnvContinuous(gym.Env):
         observation, info = self.get_state()
         # compute reward
         reward = self.compute_reward(observation, info)  # obtain reward
-        # normalize reward
-        # reward = min_max_norm(reward, a=-1, b=1,
-        #                       minx=self._reward_lim[0],
-        #                       maxx=self._reward_lim[1])
         return observation, reward, info
 
     def lift_uav(self, altitude):

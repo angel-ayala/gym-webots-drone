@@ -25,8 +25,8 @@ class DroneEnvDiscrete(DroneEnvContinuous):
         # 'video.frames_per_second' : 30
     }
 
-    def __init__(self, time_limit=7500,  # 1 min
-                 max_no_action_steps=625,  # 5 sec
+    def __init__(self, time_limit_seconds=60,  # 1 min
+                 max_no_action_seconds=5,  # 5 sec
                  frame_skip=125,  # 1 sec
                  goal_threshold=5.,
                  init_altitude=25.,
@@ -35,8 +35,8 @@ class DroneEnvDiscrete(DroneEnvContinuous):
                  fire_dim=[7., 3.5],
                  is_pixels=True):
         super(DroneEnvDiscrete, self).__init__(
-            time_limit=time_limit,
-            max_no_action_steps=max_no_action_steps,
+            time_limit_seconds=time_limit_seconds,
+            max_no_action_seconds=max_no_action_seconds,
             frame_skip=frame_skip,
             goal_threshold=goal_threshold,
             init_altitude=init_altitude,
