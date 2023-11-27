@@ -291,16 +291,6 @@ class WebotsSimulation(Supervisor):
         north_rad = uav_state['north']
         dist_sensors = list()
 
-        # Normalize angular values
-        orientation[0] = min_max_norm(orientation[0],  # roll
-                                      a=-1, b=1,
-                                      minx=-np.pi, maxx=np.pi)
-        orientation[1] = min_max_norm(orientation[1],  # pitch
-                                      a=-1, b=1,
-                                      minx=-np.pi/2, maxx=np.pi/2)
-        orientation[2] = min_max_norm(orientation[2],  # yaw
-                                      a=-1, b=1,
-                                      minx=-np.pi, maxx=np.pi)
         # Apply offset and preprocess orientation
         north_rad = preprocess_orientation(north_rad)
 
@@ -522,6 +512,9 @@ if __name__ == '__main__':
 
             # capture state
             state_data = controller.get_data()
+            print('roll', state_data['orientation'][0])
+            print('pitch', state_data['orientation'][1])
+            print('yaw', state_data['orientation'][2])
             if show and state_data is not None:
                 cv2.imshow("Drone's live view", state_data['image'])
                 cv2.waitKey(1)
