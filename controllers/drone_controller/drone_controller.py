@@ -183,7 +183,7 @@ class DroneController(Robot):
             propellers_vel = self.__compute_velocity()
             self.__drone.set_motors_velocity(*propellers_vel)
             self.__drone.blink_leds()
-            self.__drone.gimbal_stabilize()
+            # self.__drone.gimbal_stabilize()
             # comms
             self.__send_state()
 
