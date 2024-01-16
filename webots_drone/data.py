@@ -190,7 +190,7 @@ class StoreStepData:
         row.append(sample[4])  # absorbing
         row.append(sample[5])  # last
         if self.epsilon is not False:
-            row.append(self.epsilon.get_value())  # epsilon
+            row.append(self.epsilon())  # epsilon
 
         row.append(info['penalization'])
         row.append(info['final'])
