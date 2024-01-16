@@ -157,7 +157,7 @@ class DroneEnvContinuous(gym.Env):
             end = True
             info['final'] = 'No Action'
         # is_flipped
-        elif check_flipped(info["orientation"]):
+        elif check_flipped(info["orientation"], info["dist_sensors"]):
             logger.info(f"[{info['timestamp']}] Final state, Flipped")
             discount -= 10.
             end = True

@@ -107,15 +107,17 @@ def check_flight_area(uav_pos, flight_area):
     up = uav_pos[2] > flight_area[1][2]
     return [north, south, east, west, up, down]
 
-def check_flipped(angles):
+
+def check_flipped(orientation, dist_sensors):
     """Check if the Drone was flipped.
 
-    :param list angles: The Drone's 3D normalized angles.
+    :param list orientation: The Drone's 3D orientation angles.
+    :param list dist_sensors: The Drone's 3D normalized distance sensors.
 
-    :return bool: True if have the propellers down side.
+    :return bool: True if have the propellers down side on the floor.
     """
-    # TODO: check value
-    return angles[0] > 0.3  # top dist infrared
+    return (3. < orientation[0] or orientation[0] < -3.
+            ) and dist_sensors[-1] < 0.01
 
 
 def check_near_object(sensors, threshold=0.01):

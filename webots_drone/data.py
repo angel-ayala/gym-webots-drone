@@ -214,10 +214,14 @@ class StoreStepData:
             self._iteration += 1
 
 
-class EpisodeData:
+class ExperimentData:
     def __init__(self, history_path):
         self.history_path = Path(history_path)
         self.history_df = pd.read_csv(history_path)
+        self.learn_eps = self.history_df[
+            self.history_df['phase'] == 'learn']['ep'].unique()
+        self.eval_eps = self.history_df[
+            self.history_df['phase'] == 'eval']['ep'].unique()
 
     def get_tuple_control(self, filtered_df):
         state_cols = ['pos_x', 'pos_y', 'pos_z',
@@ -240,9 +244,16 @@ class EpisodeData:
         filtered_df = self.history_df[np.logical_and(ep_idxs, iter_idxs)]
         return filtered_df
 
-    def get_ep_trajectories(self, episode, iterations=None):
-        episode_df = self.history_df[self.history_df['ep'] == episode]
+    def get_ep_trajectories(self, episode_id, iterations=None, phase='eval'):
+        if phase == 'eval':
+            episode = self.eval_eps[episode_id]
+        elif phase == 'learn':
+            episode = self.learn_eps[episode_id]
+        else:
+            raise ValueError(
+                "The phase argument must be either 'learn' or 'eval'.")
         if iterations is None:
+            episode_df = self.history_df[self.history_df['ep'] == episode]
             iterations = episode_df['iteration'].unique().tolist()
         if type(iterations) != list:
             iterations = [iterations]
@@ -318,8 +329,8 @@ class VideoCallback:
 
 if __name__ == '__main__':
     experiment_path = Path('logs/test_2023-11-21_13-04-15/history.csv')
-    ep_data = EpisodeData(experiment_path)
-    trajectory_data = ep_data.get_ep_trajectories(0, [0])
+    exp_data = ExperimentData(experiment_path)
+    trajectory_data = exp_data.get_ep_trajectories(0, [0])
     trajectory = trajectory_data[0]
     path_length, init_pos, target_pos, times, rewards, orientation = trajectory[:6]
     print('Trajectory with ', path_length, 'steps length, with ',
@@ -327,7 +338,7 @@ if __name__ == '__main__':
     print('\tfrom:', init_pos, 'to', target_pos)
     print('\ttimes:', times[0], 's - ', times[-1], 's',
           'total:', times[-1] - times[0], 'seconds')
-    for trj in ep_data.iter_trajectory(trajectory[-3:]):
+    for trj in exp_data.iter_trajectory(trajectory[-3:]):
         pos, ang, speed, ang_vel = trj[0].reshape((4, 3))
         action = trj[1]
         print(pos, action)
