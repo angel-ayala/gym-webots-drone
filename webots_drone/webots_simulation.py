@@ -17,6 +17,7 @@ from webots_drone.utils import min_max_norm
 from webots_drone.utils import decode_image
 from webots_drone.utils import emitter_send_json
 from webots_drone.utils import receiver_get_json
+from webots_drone.utils import compute_risk_distance
 
 sys.path.append(os.environ['WEBOTS_HOME'] + "/lib/controller/python")
 from controller import Supervisor
@@ -135,8 +136,8 @@ class WebotsSimulation(Supervisor):
             set_radius=target_node.getField('fireRadius').setSFFloat,
             set_pos=target_node.getField('translation').setSFVec3f
         )
-        self.risk_distance = self.target_node['get_radius']() +\
-            self.target_node['get_height']() * 4
+        self.risk_distance = compute_risk_distance(
+            self.target_node['get_height'](), self.target_node['get_radius']())
 
     def init_drone_node(self):
         # Drone vars
@@ -199,7 +200,7 @@ class WebotsSimulation(Supervisor):
         fire_pos = self.target_node['get_pos']()
         fire_pos[2] = fire_height * 0.5  # update height
         self.target_node['set_pos'](list(fire_pos))
-        self.risk_distance = fire_radius + fire_height * 4
+        self.risk_distance = compute_risk_distance(fire_height, fire_radius)
 
         return (fire_height, fire_radius), self.risk_distance
 

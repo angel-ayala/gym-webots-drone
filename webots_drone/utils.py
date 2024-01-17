@@ -9,6 +9,18 @@ import base64
 import numpy as np
 
 
+def compute_risk_distance(fire_heigth, fire_radius):
+    """Compute the risk zone distance between the drone and fire.
+    The risk zone is consider 4 times the fire height as mentioned in
+    Firefighter Safety Zones: A Theoretical Model Based on Radiative
+    Heating, Butler, 1998.
+
+    :param float fire_heigth: Indicate the fire's height.
+    :param float fire_radius: Indicate the fire's radius.
+    """
+    return 4 * fire_heigth + fire_radius
+
+
 def preprocess_orientation(orientation):
     # Convert from [-pi, pi] to [0, 2pi]
     if orientation < 0:

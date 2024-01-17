@@ -73,7 +73,11 @@ if __name__ == '__main__':
 
         for i, x in enumerate(x_values):
             for j, y in enumerate(y_values):
-                distance_reward = compute_distance_reward([x, y], ref_position)
+                distance_reward = compute_distance_reward(
+                    [x, y], ref_position,
+                    distance_max=50.,
+                    distance_threshold=36.5,
+                    threshold_offset=5.)
                 distance_grid[i, j] += distance_reward
                 for k, orientation in enumerate(orientation_values):
                     # Calculate reward for each combination
@@ -83,13 +87,13 @@ if __name__ == '__main__':
 
         return x_grid, y_grid, orientation_grid, distance_grid
 
-    def plot_reward_heatmap(x_grid, y_grid, reward_grid):
+    def plot_reward_heatmap(x_grid, y_grid, reward_grid, title):
         plt.figure(figsize=(8, 6))
         plt.pcolormesh(x_grid, y_grid, reward_grid, cmap='viridis')
         plt.colorbar(label='Reward')
         plt.xlabel('Position X')
         plt.ylabel('Position Y')
-        plt.title('Reward Heatmap considering Position (X, Y) and Orientation')
+        plt.title(title)
         # Calculate vector components
         headings_rad = np.linspace(0, 2 * np.pi, num=100)
         dx = np.cos(headings_rad)
@@ -99,7 +103,7 @@ if __name__ == '__main__':
         plt.show()
 
     # Define the range of positions and orientations
-    agent_position_range = (-100, 100)  # Example range for x and y coordinates
+    agent_position_range = (-50, 50)  # Example range for x and y coordinates
     orientation_range = (0, 2 * np.pi)  # Example range for orientation (radians)
 
     # Define the target position
@@ -118,6 +122,9 @@ if __name__ == '__main__':
     total_rewards = sum_and_normalize(orientation_rewards, distance_rewards)
 
     # Plot the reward heatmap
-    plot_reward_heatmap(x_grid, y_grid, orientation_rewards)
-    plot_reward_heatmap(x_grid, y_grid, distance_rewards)
-    plot_reward_heatmap(x_grid, y_grid, total_rewards)
+    plot_reward_heatmap(x_grid, y_grid, orientation_rewards,
+                        'Reward Heatmap considering Orientation')
+    plot_reward_heatmap(x_grid, y_grid, distance_rewards,
+                        'Reward Heatmap considering Position')
+    plot_reward_heatmap(x_grid, y_grid, total_rewards,
+                        'Reward Heatmap considering Position and Orientation')
