@@ -122,16 +122,18 @@ class StoreStepData:
 
     def set_init_state(self, state, info):
         self.last_state = info2state(info).tolist()
+        self._iteration += 1
+
+    def new_episode(self):
+        self._ep += 1
 
     def set_learning(self):
         self._phase = 'learn'
         self._iteration = 0
-        self._ep += 1
 
     def set_eval(self):
         self._phase = 'eval'
         self._iteration = 0
-        self._ep += 1
 
     def create_header(self):
         state_cols = ['pos_x', 'pos_y', 'pos_z',
@@ -210,8 +212,6 @@ class StoreStepData:
             outfile.writelines(','.join(map(str, row)) + '\n')
 
         self.last_state = state
-        if sample[5]:
-            self._iteration += 1
 
 
 class ExperimentData:
