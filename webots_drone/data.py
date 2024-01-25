@@ -126,14 +126,13 @@ class StoreStepData:
 
     def new_episode(self):
         self._ep += 1
+        self._iteration = -1
 
     def set_learning(self):
         self._phase = 'learn'
-        self._iteration = 0
 
     def set_eval(self):
         self._phase = 'eval'
-        self._iteration = 0
 
     def create_header(self):
         state_cols = ['pos_x', 'pos_y', 'pos_z',
@@ -322,7 +321,7 @@ class VideoCallback:
     def __call__(self, sample, info):
         if not self._recording:
             self._start_recording()
-        if sample[5]:
+        if sample[4] or sample[5]:
             self._iteration += 1
             self._stop_recording()
 
