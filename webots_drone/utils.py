@@ -21,23 +21,6 @@ def compute_risk_distance(fire_heigth, fire_radius):
     return 4 * fire_heigth + fire_radius
 
 
-def preprocess_orientation(orientation):
-    # Convert from [-pi, pi] to [0, 2pi]
-    if orientation < 0:
-        orientation += 2 * np.pi
-    return orientation
-
-
-def info2state(info):
-    state = np.zeros((12, ), dtype=np.float32)
-    if info is not None:
-        state[:3] = info['position']  # position
-        state[3:6] = info['orientation']  # orientation angles
-        state[6:9] = info['speed']  # pos_vel
-        state[9:] = info['angular_velocity']  # angular velocity
-    return state
-
-
 def emitter_send_json(emitter, data):
     str_data = json.dumps(data).encode('utf-8')
     emitter.send(str_data, len(str_data) + 1)

@@ -13,7 +13,6 @@ from drone import Drone
 from webots_drone.utils import encode_image
 from webots_drone.utils import receiver_get_json
 from webots_drone.utils import emitter_send_json
-from webots_drone.utils import preprocess_orientation
 
 
 # Drone Robot

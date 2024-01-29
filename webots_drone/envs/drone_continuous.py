@@ -13,7 +13,6 @@ from gym import spaces, logger
 from gym.utils import seeding
 
 from webots_drone import WebotsSimulation
-from webots_drone.utils import info2state
 from webots_drone.utils import compute_distance
 from webots_drone.utils import check_flight_area
 from webots_drone.utils import check_collision
@@ -23,10 +22,10 @@ from webots_drone.reward import compute_orientation_reward
 from webots_drone.reward import compute_distance_reward
 from webots_drone.reward import sum_and_normalize as sum_rewards
 
+from .preprocessor import info2obs_1d
+from .preprocessor import info2image
+from .preprocessor import seconds2steps
 
-def seconds2steps(seconds, frame_skip, step_time):
-    total_step_time = frame_skip * step_time
-    return int(seconds * 1000 / total_step_time)
 
 
 class DroneEnvContinuous(gym.Env):
@@ -68,7 +67,7 @@ class DroneEnvContinuous(gym.Env):
                                                 shape=self.obs_shape,
                                                 dtype=self.obs_type)
         else:
-            self.obs_shape = (12, )
+            self.obs_shape = (22, )
             self.obs_type = np.float32
             self.observation_space = spaces.Box(low=float('-inf'),
                                                 high=float('inf'),
@@ -108,31 +107,14 @@ class DroneEnvContinuous(gym.Env):
         self.sim.seed(seed2)
         return [seed1, seed2]
 
-    def preprocess_image(self, img):
-        """BGR2RGB, center crop, and 84x84 resize operations."""
-        # make it square from center
-        hheight = self.sim.image_shape[0] // 2  # half height
-        hcenter = self.sim.image_shape[1] // 2  # half width
-        center_idx = (hcenter - hheight, hcenter + hheight)
-        result = np.asarray(img[:, center_idx[0]:center_idx[1], :3],
-                            dtype=self.obs_type)
-        # resize
-        result = cv2.resize(result, self.obs_shape[1:],
-                            interpolation=cv2.INTER_AREA)
-        # channel first
-        result = np.swapaxes(result, 2, 0)
-        return result
-
     def get_state(self):
         """Process the image to get a RGB image."""
         state_data = self.sim.get_data()
-        image_rgb = state_data['image'].copy()[:, :, [2, 1, 0]]  # BGR2RGB
+
         if self.is_pixels:
-            state = self.preprocess_image(image_rgb)
-            del state_data['image']
+            state = info2image(state_data, output_size=self.obs_shape[0])
         else:
-            state = info2state(state_data)
-            state_data['image_rgb'] = image_rgb
+            state = info2obs_1d(state_data)
 
         return state, state_data
 

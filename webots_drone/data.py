@@ -9,8 +9,7 @@ import json
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from webots_drone.utils import info2state
-from webots_drone.webots_simulation import WebotsSimulation
+from webots_drone.envs.preprocessor import info2state
 from webots_drone.envs.drone_discrete import DroneEnvDiscrete
 
 
@@ -160,6 +159,8 @@ class StoreStepData:
         data_cols += ['target_pos_x',
                       'target_pos_y',
                       'target_pos_z']
+        data_cols += ['target_dim_height',
+                      'target_dim_radius']
         data_cols += ['rc_pos_x',
                       'rc_pos_y',
                       'rc_pos_z']
@@ -201,6 +202,7 @@ class StoreStepData:
             row.append(info['dist_sensors'][nid])
 
         row.extend(info['target_position'])
+        row.extend(info['target_dim'])
         row.extend(info['rc_position'])
         row.extend(info['emitter']['direction'])
         row.append(info['emitter']['signal_strength'])
@@ -278,7 +280,7 @@ class ExperimentData:
                                  s_t1))  # next state
 
         return trajectories
-    
+
     def iter_trajectory(self, trajectory):
         state, action, next_state = trajectory
         x_t = None
@@ -287,7 +289,7 @@ class ExperimentData:
             x_t = state[step] if step == 0 else state[step] - next_state[step]
             yield x_t, u_t
             u_t = action[step].copy()
-            
+
 
 
 class VideoCallback:
