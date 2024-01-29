@@ -116,7 +116,7 @@ class StoreStepData:
         self.epsilon = epsilon
         self._phase = 'init'
         self._ep = 0
-        self._iteration = 0
+        self._iteration = -1
         self.create_header()
 
     def set_init_state(self, state, info):
@@ -137,7 +137,7 @@ class StoreStepData:
         state_cols = ['pos_x', 'pos_y', 'pos_z',
                       'ori_x', 'ori_y', 'ori_z',
                       'vel_x', 'vel_y', 'vel_z',
-                      'velang_x', 'velang_y', 'velang_z',]
+                      'velang_x', 'velang_y', 'velang_z', 'north_rad']
         # action_cols = ['roll', 'pitch', 'yaw', 'thrust']
         action_cols = ['action']
 
@@ -152,7 +152,6 @@ class StoreStepData:
             data_cols += ['epsilon']
         data_cols += ['penalization', 'final']
 
-        data_cols += ['north_rad']
         for nid in range(self.n_sensors):
             data_cols += ['dist_sensor_' + str(nid)]
 

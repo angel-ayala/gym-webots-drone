@@ -112,7 +112,7 @@ class DroneEnvContinuous(gym.Env):
         state_data = self.sim.get_data()
 
         if self.is_pixels:
-            state = info2image(state_data, output_size=self.obs_shape[0])
+            state = info2image(state_data, output_size=self.obs_shape[-1])
         else:
             state = info2obs_1d(state_data)
 
