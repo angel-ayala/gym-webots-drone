@@ -195,7 +195,6 @@ class StoreStepData:
 
         row.append(info['penalization'])
         row.append(info['final'])
-        row.append(info['north_rad'])
 
         for nid in range(self.n_sensors):
             row.append(info['dist_sensors'][nid])
