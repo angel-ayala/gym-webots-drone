@@ -1,18 +1,25 @@
 from setuptools import setup
-# from setuptools import find_packages
 
 package_name = 'webots_drone'
 
+data_files = list()
+data_files.append(('share/' + package_name + '/worlds',
+                   ['worlds/forest_tower.wbt']))
+
+data_files.append(('share/' + package_name + '/protos',
+                   ['protos/RadioController.proto',
+                   'protos/FireSmoke.proto']))
+
 setup(
     name=package_name,
-    version='0.1.0',    
+    version='1.1.0',    
     description='Gym wrapper for Webots simulations scene with the DJI Mavic Pro 2 drone',
     url='https://github.com/angel-ayala/gym-webots-drone',
     author='Angel Ayala',
     author_email='aaam@ecomp.poli.br',
     license='GPL-3.0',
     packages=[package_name],
-    # packages=find_packages(),
+    data_files=data_files,
     install_requires=['gym==0.26.0',
                       'simple_pid==2.0.0',
                       'opencv-python==4.8.1.*'],
