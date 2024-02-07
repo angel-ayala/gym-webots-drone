@@ -9,6 +9,21 @@ import base64
 import numpy as np
 
 
+def compute_distance_difference(pos1, pos2, ref_position):
+    dist1 = compute_distance(pos1, ref_position)
+    dist2 = compute_distance(pos2, ref_position)
+    return (dist1 - dist2)
+
+
+def compute_orientation(point1, point2):
+    # Calculate the differences in x and y coordinates
+    delta_x = point2[0] - point1[0]
+    delta_y = point2[1] - point1[1]
+
+    # Calculate the orientation (angle) using arctangent
+    return np.arctan2(delta_y, delta_x)
+
+
 def compute_risk_distance(fire_heigth, fire_radius):
     """Compute the risk zone distance between the drone and fire.
     The risk zone is consider 4 times the fire height as mentioned in
@@ -62,9 +77,7 @@ def compute_distance(coord1, coord2):
     :return np.array: squared difference sum of the coordinates, rounded
         to 4 decimal points.
     """
-    c1 = np.asarray(coord1)
-    c2 = np.asarray(coord2)
-    return np.sqrt(np.sum(np.square(c1 - c2))).round(4)
+    return np.linalg.norm(np.array(coord1) - np.array(coord2)).round(4)
 
 
 def bytes2image(buffer, shape=(240, 400, 4)):
