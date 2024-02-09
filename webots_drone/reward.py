@@ -54,7 +54,7 @@ def sum_and_normalize(orientation_rewards, distance_rewards, distance_diff=None)
     r_orientation = (orientation_rewards + 1.)
     r_sum = r_distance * r_orientation
     if distance_diff is not None:
-        r_sum *= distance_diff
+        r_sum *= np.sign(distance_diff)
     return r_sum - 1.
 
 

@@ -10,8 +10,8 @@ import numpy as np
 
 
 def compute_distance_difference(pos1, pos2, ref_position):
-    dist1 = compute_distance(pos1, ref_position)
-    dist2 = compute_distance(pos2, ref_position)
+    dist1 = compute_distance(pos1, ref_position).round(2)
+    dist2 = compute_distance(pos2, ref_position).round(2)
     return (dist1 - dist2)
 
 
