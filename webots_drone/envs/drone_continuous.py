@@ -14,7 +14,6 @@ from gym.utils import seeding
 
 from webots_drone import WebotsSimulation
 from webots_drone.utils import compute_distance
-from webots_drone.utils import compute_distance_difference
 from webots_drone.utils import check_flight_area
 from webots_drone.utils import check_collision
 from webots_drone.utils import check_flipped
