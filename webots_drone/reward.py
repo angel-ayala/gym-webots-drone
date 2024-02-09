@@ -49,12 +49,10 @@ def compute_distance_reward(position, ref_position, distance_max=50.,
     return (reward - 1.) / 2.
 
 
-def sum_and_normalize(orientation_rewards, distance_rewards, distance_diff=None):
+def sum_and_normalize(orientation_rewards, distance_rewards, distance_diff=1.):
     r_distance = (distance_rewards + 1.)
     r_orientation = (orientation_rewards + 1.)
-    r_sum = r_distance * r_orientation
-    if distance_diff is not None:
-        r_sum *= np.sign(distance_diff)
+    r_sum = r_distance * r_orientation * (distance_diff != 0.)
     return r_sum - 1.
 
 

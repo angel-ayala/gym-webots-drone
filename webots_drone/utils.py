@@ -9,12 +9,6 @@ import base64
 import numpy as np
 
 
-def compute_distance_difference(pos1, pos2, ref_position):
-    dist1 = compute_distance(pos1, ref_position).round(2)
-    dist2 = compute_distance(pos2, ref_position).round(2)
-    return (dist1 - dist2)
-
-
 def compute_orientation(point1, point2):
     # Calculate the differences in x and y coordinates
     delta_x = point2[0] - point1[0]
@@ -75,9 +69,9 @@ def compute_distance(coord1, coord2):
     :param np.array coord2: the second coordinates.
 
     :return np.array: squared difference sum of the coordinates, rounded
-        to 4 decimal points.
+        to 2 decimal points.
     """
-    return np.linalg.norm(np.array(coord1) - np.array(coord2)).round(4)
+    return np.linalg.norm(np.array(coord1) - np.array(coord2)).round(2)
 
 
 def bytes2image(buffer, shape=(240, 400, 4)):

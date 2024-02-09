@@ -204,7 +204,7 @@ class DroneEnvContinuous(gym.Env):
         if end:
             self._end = end
             return discount
-        
+
         # 2 dimension considered
         if len(self.last_info.keys()) == 0:
             uav_pos_t = info['position'][:2]  # pos_t+1
@@ -228,8 +228,7 @@ class DroneEnvContinuous(gym.Env):
             distance_threshold=np.sum(self._goal_threshold),
             threshold_offset=self._goal_threshold[1])
 
-        distance_diff = compute_distance_difference(uav_pos_t, uav_pos_t1,
-                                                    target_xy)
+        distance_diff = compute_distance(uav_pos_t, uav_pos_t1)
         reward = sum_rewards(orientation_reward, distance_reward,
                              distance_diff=distance_diff)
 
