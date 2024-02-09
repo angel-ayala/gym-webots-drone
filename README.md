@@ -7,7 +7,8 @@ Learning agent to control a drone under a fire emergency context. In order to ma
 
 ## Updates
 
-- 01/30/2024 [Major fixes] v1.1: multi modal approaches support, store data fixes
+- 2024/02/09 [Major fixes] v1.2: update reward values $`\in [-1, 0]`$ and adding distance difference as a boolean factor
+- 2024/01/30 [Major fixes] v1.1: multi modal approaches support, store data fixes
 
 ## Available environments
 
@@ -39,37 +40,43 @@ The reward signal comprises a two component value of distance and orientation. T
 
 ```python
 def compute_direction_vector(position, orientation, ref_position):
-    # Calculate the vector pointing
+    # Calculate the vector pointing from the agent position to the target position
     vector_to_target = np.array(ref_position) - np.array(position)
     # Normalize the vector
     norm_vector_to_target = vector_to_target / np.linalg.norm(vector_to_target)
     # Calculate the agent's forward vector based on its orientation
     agent_forward_vector = np.array([np.cos(orientation),
                                      np.sin(orientation)])
+
     return norm_vector_to_target, agent_forward_vector
 
 def compute_orientation_reward(position, orientation, ref_position):
     # Get direction vectors
     direction_to_target, agent_forward = compute_direction_vector(
         position, orientation, ref_position)
-    # Calculate cosine similarity
+
+    # Calculate cosine similarity between the direction to the target and agent's forward direction
     cosine_similarity = np.dot(direction_to_target, agent_forward)
-    return cosine_similarity
+
+    return (cosine_similarity - 1.) / 2.
 
 def compute_distance_reward(position, ref_position, distance_max=50.,
-                            distance_threshold=25.,
-                            threshold_offset=5.):
+                            distance_threshold=25., threshold_offset=5.):
     curr_distance = compute_distance(position, ref_position)
+    safety_distance = distance_threshold - threshold_offset / 2
+    reward = 1 - abs(1 - curr_distance / safety_distance)
+    reward = max(-1., reward)
+
     if curr_distance < distance_threshold - threshold_offset:
         return -1.
-    if curr_distance < distance_threshold:
-        return 1.
-    return max(-1., 1. - curr_distance / distance_max)
 
-def sum_and_normalize(orientation_rewards, distance_rewards):
-    sum_rewards = (1. + orientation_rewards) * (1. + distance_rewards)
-    sum_rewards /= 4.
-    return sum_rewards
+    return (reward - 1.) / 2.
+
+def sum_and_normalize(orientation_rewards, distance_rewards, distance_diff=1.):
+    r_distance = (distance_rewards + 1.)
+    r_orientation = (orientation_rewards + 1.)
+    r_sum = r_distance * r_orientation * (distance_diff != 0.)
+    return r_sum - 1.
 ```
 
 Additionally some penalties were considered to ensure safety and energy efficiency. A ring zone delimitates the risk area which the UAV must avoid because can suffer damage. Very near to it there is the goal region which is the closest area to reach around the fire. A square area delimitates the allowed flight area to avoid the drone go far away. As safety must be asure to flight far enough of obstacles, adding a penalization if is near of any object or if collided with it. The following method implements it.
@@ -91,22 +98,22 @@ def __compute_penalization(self, info, curr_distance):
     if any(check_near_object(info["dist_sensors"],
                              near_object_threshold)):
         logger.info(f"[{info['timestamp']}] Warning state, ObjectNear")
-        penalization -= 1
+        penalization -= 10
         penalization_str += 'ObjectNear|'
     # outside flight area
     if any(check_flight_area(info["position"], self.flight_area)):
         logger.info(f"[{info['timestamp']}] Warning state, OutFlightArea")
-        penalization -= 1
+        penalization -= 10
         penalization_str += 'OutFlightArea|'
     # is_collision
     if any(check_collision(info["dist_sensors"])):
         logger.info(f"[{info['timestamp']}] Warning state, Near2Collision")
-        penalization -= 1
+        penalization -= 10
         penalization_str += 'Near2Collision|'
     # risk zone trespassing
     if curr_distance < self.sim.risk_distance:
         logger.info(f"[{info['timestamp']}] Warning state, InsideRiskZone")
-        # penalization -= 1
+        penalization -= 10
         penalization_str += 'InsideRiskZone'
 
     if len(penalization_str) > 0:
@@ -137,24 +144,32 @@ def compute_reward(self, obs, info):
         self._end = end
         return discount
 
+    # 2 dimension considered
+    if len(self.last_info.keys()) == 0:
+        uav_pos_t = info['position'][:2]  # pos_t+1
+    else:
+        uav_pos_t = self.last_info['position'][:2]  # pos_t
+    uav_pos_t1 = info['position'][:2]  # pos_t+1
+    uav_ori = info['north_rad']
+    target_xy = self.sim.get_target_pos()[:2]
+
     # not terminal, must be avoided
-    goal_distance = self.sim.get_target_distance()
+    goal_distance = compute_distance(uav_pos_t1, target_xy)
     penalization = self.__compute_penalization(info, goal_distance)
-    if penalization > 0:
+    if penalization != 0:
         return penalization
 
-    # 2 dimension considered
-    uav_xy = info['position'][:2]
-    target_xy = self.sim.get_target_pos()[:2]
-    uav_ori = info['north_rad']
     # compute reward components
-    orientation_reward = compute_orientation_reward(uav_xy, uav_ori,
+    orientation_reward = compute_orientation_reward(uav_pos_t, uav_ori,
                                                     target_xy)
     distance_reward = compute_distance_reward(
-        uav_xy, target_xy, distance_max=50.,
+        uav_pos_t, target_xy, distance_max=50.,
         distance_threshold=np.sum(self._goal_threshold),
         threshold_offset=self._goal_threshold[1])
-    reward = sum_rewards(orientation_reward, distance_reward)
+
+    distance_diff = compute_distance(uav_pos_t, uav_pos_t1)
+    reward = sum_rewards(orientation_reward, distance_reward,
+                         distance_diff=distance_diff)
 
     return reward
 ```
