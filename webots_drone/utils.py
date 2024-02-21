@@ -71,7 +71,7 @@ def compute_distance(coord1, coord2):
     :return np.array: squared difference sum of the coordinates, rounded
         to 2 decimal points.
     """
-    return np.linalg.norm(np.array(coord1) - np.array(coord2)).round(2)
+    return np.linalg.norm(np.array(coord1) - np.array(coord2)).round(4)
 
 
 def bytes2image(buffer, shape=(240, 400, 4)):

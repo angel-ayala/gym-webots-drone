@@ -252,7 +252,8 @@ class ExperimentData:
             raise ValueError(
                 "The phase argument must be either 'learn' or 'eval'.")
         if iterations is None:
-            episode_df = self.history_df[self.history_df['ep'] == episode]
+            episode_df = self.history_df[self.history_df['phase'] == phase]
+            episode_df = episode_df[episode_df['ep'] == episode]
             iterations = episode_df['iteration'].unique().tolist()
         if type(iterations) != list:
             iterations = [iterations]

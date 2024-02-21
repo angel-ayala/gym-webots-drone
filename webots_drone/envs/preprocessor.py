@@ -73,17 +73,18 @@ def info2emitter_vector(info):
     return emitter_vector
 
 
-def info2obs_1d(infos):
+def info2obs_1d(infos, xyz_ranges, xyz_velocities):
     vector_state = info2state(infos)
     # normalize
-    vector_state = preprocess_angles(vector_state)
     sensor_attitude = state2inertial(vector_state)
+    sensor_attitude = preprocess_angles(sensor_attitude)
     sensor_position = state2position(vector_state)
-    sensor_north = vector_state[-1]
+    sensor_position = preprocess_position(sensor_position, *xyz_ranges, *xyz_velocities)
+    sensor_north = vector_state[-1] / np.pi
     sensor_distance = info2distance(infos)
     # sensor_emitter = info2emitter_vector(infos)
     obs_1d = np.hstack((sensor_attitude, sensor_position,
-                        sensor_north, sensor_distance))
+                        sensor_north, sensor_distance), dtype=np.float32)
     return obs_1d
 
 
@@ -97,12 +98,27 @@ def preprocess_orientation(orientation):
 def preprocess_pixels(obs):
     return obs.astype(np.float32) / 255.
 
+def preprocess_position(obs, x_range, y_range, z_range, x_vel, y_vel, z_vel):
+    # Normalize position
+    obs[0] = min_max_norm(obs[0], a=-1, b=1, minx=x_range[0], maxx=x_range[1])
+    obs[1] = min_max_norm(obs[1], a=-1, b=1, minx=y_range[0], maxx=y_range[1])
+    obs[2] = min_max_norm(obs[2], a=-1, b=1, minx=z_range[0], maxx=z_range[1])
+    # Normalize translational velocities
+    obs[3] /= x_vel
+    obs[4] /= y_vel
+    obs[5] /= z_vel
+    return obs
+
 
 def preprocess_angles(obs):
-    # Normalize angular values
-    obs[0] = min_max_norm(obs[3], a=-1, b=1, minx=-np.pi, maxx=np.pi)
-    obs[1] = min_max_norm(obs[4], a=-1, b=1, minx=-np.pi/2, maxx=np.pi/2)
-    obs[2] = min_max_norm(obs[5], a=-1, b=1, minx=-np.pi, maxx=np.pi)
+    # Normalize Euler angles
+    obs[0] = min_max_norm(obs[0], a=-1, b=1, minx=-np.pi, maxx=np.pi)
+    obs[1] = min_max_norm(obs[1], a=-1, b=1, minx=-np.pi/2, maxx=np.pi/2)
+    obs[2] = min_max_norm(obs[2], a=-1, b=1, minx=-np.pi, maxx=np.pi)
+    # Normalize angular velocities
+    obs[3] = min_max_norm(obs[3], a=-1, b=1, minx=-np.pi, maxx=np.pi)
+    obs[4] = min_max_norm(obs[4], a=-1, b=1, minx=-np.pi/2, maxx=np.pi/2)
+    obs[5] = min_max_norm(obs[5], a=-1, b=1, minx=-np.pi, maxx=np.pi)
     return obs
 
 

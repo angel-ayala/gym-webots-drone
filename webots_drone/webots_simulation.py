@@ -47,7 +47,6 @@ class WebotsSimulation(Supervisor):
         # actions value boundaries
         self.limits = self.get_control_ranges()
         # runtime vars
-        # self.seed()
         self.init_nodes()
         self.init_comms()
 
@@ -88,10 +87,6 @@ class WebotsSimulation(Supervisor):
                          control_ranges])      # high limits
 
     def get_flight_area(self, altitude_limits=[11, 75]):
-        # rc_pos = self.getSelf().getPosition()
-        # offset = [[50, 50, altitude_limits[0]],
-        #           [50, 40, altitude_limits[1]]]
-        # return compute_flight_area(rc_pos, offset)
         area_size = self.getFromDef('FlightArea').getField('size').getSFVec2f()
         area_size = [fs / 2 for fs in area_size]  # size from center
         flight_area = [[fs * -1 for fs in area_size], area_size]
@@ -107,11 +102,6 @@ class WebotsSimulation(Supervisor):
         return self
 
     def init_areas(self):
-        # Flight Area
-        # area_size = self.getFromDef('FlightArea').getField('size').getSFVec2f()
-        # area_size = [fs / 2 for fs in area_size]  # size from center
-        # self.flight_area = [[fs * -1 for fs in area_size], area_size]
-
         # Forest area
         forest_shape = self.getFromDef('ForestArea').getField('shape')
         self.forest_area = []
@@ -216,13 +206,10 @@ class WebotsSimulation(Supervisor):
         """
         fire_radius = self.target_node['get_radius']()
         fire_p = self.target_node['get_pos']()  # current position
-        if fire_pos is None:  # randomize position
-            # get forest limits
-            X_range = [self.forest_area[:, 0].min(),
-                       self.forest_area[:, 0].max()]
-            Y_range = [self.forest_area[:, 1].min(),
-                       self.forest_area[:, 1].max()]
-
+        # get forest limits
+        X_range = [self.forest_area[:, 0].min(), self.forest_area[:, 0].max()]
+        Y_range = [self.forest_area[:, 1].min(), self.forest_area[:, 1].max()]
+        if fire_pos is None:
             # randomize position
             fire_p[0] = self.np_random.uniform(fire_radius - abs(X_range[0]),
                                                X_range[1] - fire_radius)
@@ -231,26 +218,33 @@ class WebotsSimulation(Supervisor):
         else:
             fire_p[0] = fire_pos[0]
             fire_p[1] = fire_pos[1]
+
+        # ensure fire position inside the forest
+        fire_p[0] = np.clip(fire_p[0], X_range[0], X_range[1])
+        fire_p[1] = np.clip(fire_p[1], Y_range[0], Y_range[1])
+
         # set new position
         self.target_node['set_pos'](list(fire_p))
 
         return fire_p
 
-    def set_fire(self, fire_pos=None, fire_height=None, fire_radius=None):
+    def set_fire(self, fire_pos=None, fire_height=None, fire_radius=None,
+                 dist_threshold=0.):
         self.set_fire_dimension(fire_height, fire_radius)
         new_fire_pos = self.set_fire_position(fire_pos)
 
         # avoid to the fire appears near the drone's initial position
         must_do = 0
-        while self.get_target_distance() <= self.risk_distance:
+        while self.get_target_distance() <= self.get_risk_distance(dist_threshold):
             # randomize position offset
             offset = self.np_random.uniform(0.1, 1.)
             if must_do % 2 == 0:
-                new_fire_pos[0] = new_fire_pos[0] + offset
-                new_fire_pos[1] = new_fire_pos[1] - offset
+                new_fire_pos[0] += offset
+                new_fire_pos[1] -= offset
             else:
-                new_fire_pos[0] = new_fire_pos[0] - offset
-                new_fire_pos[1] = new_fire_pos[1] + offset
+                new_fire_pos[0] -= offset
+                new_fire_pos[1] += offset
+            must_do += 1
             self.set_fire_position(new_fire_pos)
 
     def get_drone_pos(self):
@@ -270,6 +264,9 @@ class WebotsSimulation(Supervisor):
         # Squared Euclidean distance
         distance = compute_distance(drone_position, fire_position)
         return distance
+
+    def get_risk_distance(self, threshold=0.):
+        return self.risk_distance + threshold
 
     def read_data(self):
         """Read the data sended by the drone's Emitter node.
@@ -416,6 +413,10 @@ class WebotsSimulation(Supervisor):
 
 if __name__ == '__main__':
     import cv2
+    from webots_drone.reward import compute_distance_reward
+    from webots_drone.reward import compute_orientation_reward
+    from webots_drone.reward import compute_distance_diff
+    from webots_drone.reward import sum_and_normalize as sum_rewards
 
     def print_control_keys():
         """Display manual control message."""
@@ -430,6 +431,47 @@ if __name__ == '__main__':
         print("- 'd': turn right.")
         print("- 'a': turn left.")
         print("- 'q': exit.")
+
+    def get_kb_action(kb):
+        # capture control data
+        key = kb.getKey()
+
+        run_flag = True
+        roll_angle = 0.
+        pitch_angle = 0.
+        yaw_angle = 0.  # drone.yaw_orientation
+        altitude = 0.  # drone.target_altitude
+
+        while key > 0:
+            # roll
+            if key == kb.LEFT:
+                roll_angle = controller.limits[0][0]
+            elif key == kb.RIGHT:
+                roll_angle = controller.limits[1][0]
+            # pitch
+            elif key == kb.UP:
+                pitch_angle = controller.limits[1][1]
+            elif key == kb.DOWN:
+                pitch_angle = controller.limits[0][1]
+            # yaw
+            elif key == ord('D'):
+                yaw_angle = controller.limits[0][2]
+            elif key == ord('A'):
+                yaw_angle = controller.limits[1][2]
+            # altitude
+            elif key == ord('W'):
+                altitude = controller.limits[1][3]  # * 0.1
+            elif key == ord('S'):
+                altitude = controller.limits[0][3]  # * 0.1
+            # quit
+            elif key == ord('Q'):
+                print('Terminated')
+                run_flag = False
+            key = kb.getKey()
+
+        action = [roll_angle, pitch_angle, yaw_angle, altitude]
+        action = controller.clip_action(action, controller.get_flight_area())
+        return action, run_flag
 
     def run(controller, show=True):
         """Run controller's main loop.
@@ -458,52 +500,20 @@ if __name__ == '__main__':
         kb.enable(controller.timestep)
 
         # Start simulation with random FireSmoke position
+        goal_threshold = 5.
+        fire_pos=[-40, 40]
+        fire_dim=[7., 3.5]
         controller.seed()
-        controller.set_fire()
+        controller.set_fire(fire_pos=fire_pos, fire_height=fire_dim[0],
+                            fire_radius=fire_dim[1], dist_threshold=goal_threshold)
         controller.play()
         controller.sync()
         run_flag = True
+        prev_state = dict()
 
         print('Fire scene is running')
         while (run_flag):  # and drone.getTime() < 30):
-            # capture control data
-            key = kb.getKey()
-
-            roll_angle = 0.
-            pitch_angle = 0.
-            yaw_angle = 0.  # drone.yaw_orientation
-            altitude = 0.  # drone.target_altitude
-
-            while key > 0:
-                # roll
-                if key == kb.LEFT:
-                    roll_angle = controller.limits[0][0]
-                elif key == kb.RIGHT:
-                    roll_angle = controller.limits[1][0]
-                # pitch
-                elif key == kb.UP:
-                    pitch_angle = controller.limits[1][1]
-                elif key == kb.DOWN:
-                    pitch_angle = controller.limits[0][1]
-                # yaw
-                elif key == ord('D'):
-                    yaw_angle = controller.limits[0][2]
-                elif key == ord('A'):
-                    yaw_angle = controller.limits[1][2]
-                # altitude
-                elif key == ord('W'):
-                    altitude = controller.limits[1][3]  # * 0.1
-                elif key == ord('S'):
-                    altitude = controller.limits[0][3]  # * 0.1
-                # quit
-                elif key == ord('Q'):
-                    print('Terminated')
-                    run_flag = False
-                key = kb.getKey()
-
-            action = [roll_angle, pitch_angle, yaw_angle, altitude]
-            action = controller.clip_action(action,
-                                            controller.get_flight_area())
+            action, run_flag = get_kb_action(kb)
 
             disturbances = dict(disturbances=action)
             # perform action
@@ -511,28 +521,39 @@ if __name__ == '__main__':
 
             # capture state
             state_data = controller.get_data()
-            print('roll', state_data['orientation'][0])
-            print('pitch', state_data['orientation'][1])
-            print('yaw', state_data['orientation'][2])
             if show and state_data is not None:
                 cv2.imshow("Drone's live view", state_data['image'])
                 cv2.waitKey(1)
-            # print("DIST: {:.2f} [{:.2f}]".format(
-            #     controller.get_goal_distance(), controller.risk_distance),
-            #     "(INFO:",
-            #     # "obj_det: {},".format(
-            #     # controller.check_near_object(sensors)),
-            #     # "out_alt: {},".format(
-            #     # controller.check_altitude()),
-            #     # "out_area: {},".format(
-            #     # controller.check_flight_area()),
-            #     # "is_flip: {},".format(
-            #     # controller.check_flipped(angles)),
-            #     "north: {:.2f})".format(
-            #         north_deg),
-            #     np.array(controller.drone_node.getPosition())
-            #     )
 
+            # 2 dimension considered
+            if len(prev_state.keys()) == 0:
+                uav_pos_t = state_data['position'][:2]  # pos_t+1
+            else:
+                uav_pos_t = prev_state['position'][:2]  # pos_t
+            uav_pos_t1 = state_data['position'][:2]  # pos_t+1
+            uav_ori = state_data['north_rad']
+            target_xy = controller.get_target_pos()[:2]
+            # compute reward components
+            orientation_reward = compute_orientation_reward(uav_pos_t, uav_ori,
+                                                            target_xy)
+            curr_distance = compute_distance(target_xy, uav_pos_t1)
+            distance_reward = compute_distance_reward(
+                uav_pos_t, target_xy, 
+                distance_threshold=controller.get_risk_distance(goal_threshold),
+                threshold_offset=goal_threshold)
+
+            # distance_diff = compute_distance(uav_pos_t, uav_pos_t1)
+            distance_diff = compute_distance_diff(target_xy, uav_pos_t, uav_pos_t1)
+            reward_nodiff = sum_rewards(orientation_reward, distance_reward)
+            reward = sum_rewards(orientation_reward, distance_reward,
+                                 distance_diff=distance_diff)
+            # reward = -1. + distance_diff * 100
+            print(f"pos_t: {uav_pos_t[0]:.3f} {uav_pos_t[1]:.3f}"\
+                  f" - post_t+1: {uav_pos_t1[0]:.3f} {uav_pos_t1[1]:.3f}"\
+                      f" -> reward ({reward_nodiff:.4f}) {reward:.4f}"\
+                      f" diff: {distance_diff:.4f} ({curr_distance:.4f}/{controller.get_risk_distance(goal_threshold):.4f})")
+
+            prev_state = state_data.copy()
         if show:
             cv2.destroyAllWindows()
 

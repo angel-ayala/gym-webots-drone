@@ -33,11 +33,11 @@ def compute_orientation_reward(position, orientation, ref_position):
     # Calculate cosine similarity between the direction to the target and agent's forward direction
     cosine_similarity = np.dot(direction_to_target, agent_forward)
 
-    return (cosine_similarity - 1.) / 2.
+    return cosine_similarity
 
 
-def compute_distance_reward(position, ref_position, distance_max=50.,
-                            distance_threshold=25., threshold_offset=5.):
+def compute_distance_reward(position, ref_position, distance_threshold=25.,
+                            threshold_offset=5.):
     curr_distance = compute_distance(position, ref_position)
     safety_distance = distance_threshold - threshold_offset / 2
     reward = 1 - abs(1 - curr_distance / safety_distance)
@@ -46,14 +46,49 @@ def compute_distance_reward(position, ref_position, distance_max=50.,
     if curr_distance < distance_threshold - threshold_offset:
         return -1.
 
-    return (reward - 1.) / 2.
+    return reward
 
+
+def compute_distance_diff(ref_position, pos_t, pos_t1):
+    distance_t = compute_distance(ref_position, pos_t)
+    distance_t1 = compute_distance(ref_position, pos_t1)
+    return distance_t - distance_t1
+
+
+# def sum_and_normalize(orientation_rewards, distance_rewards, distance_diff=1.):
+#     r_distance = (distance_rewards + 1.) / 2.
+#     # print('r_distance', r_distance.min(), r_distance.max())
+#     # r_orientation = (orientation_rewards + 1.)
+#     # r_sum = r_distance * r_orientation if distance_diff != 0. else -9.
+#     # return r_sum - 1.
+#     r_sum = (distance_rewards + orientation_rewards * r_distance) / 2.
+#     if distance_diff == 0:
+#         r_sum = -10.
+#     else:
+#         r_sum += np.sign(distance_diff)
+#     # r_sum += np.sign(distance_diff) - 1
+#     return r_sum
 
 def sum_and_normalize(orientation_rewards, distance_rewards, distance_diff=1.):
-    r_distance = (distance_rewards + 1.)
-    r_orientation = (orientation_rewards + 1.)
-    r_sum = r_distance * r_orientation * (distance_diff != 0.)
-    return r_sum - 1.
+    r_distance = (distance_rewards + 1.) / 2.
+    # print('r_distance', r_distance.min(), r_distance.max())
+    r_orientation = (orientation_rewards + 1.) / 2.
+    r_sum = (r_distance + r_orientation) * (distance_diff != 0.)
+    # return r_sum - 1.
+    # r_sum = (distance_rewards + orientation_rewards * r_distance) / 2.
+    # if distance_diff == 0:
+    #     r_sum = -10.
+    # else:
+    r_ddiff = np.sign(distance_diff)
+    if r_ddiff == 0:
+        r_sum = -10.
+    elif r_ddiff > 0:
+        r_sum += r_ddiff * 2.
+    elif r_ddiff < 0:
+        r_sum += r_ddiff
+    # r_sum += np.sign(distance_diff)
+    # r_sum += np.sign(distance_diff) - 1
+    return r_sum
 
 
 if __name__ == '__main__':
@@ -74,8 +109,7 @@ if __name__ == '__main__':
                 # Calculate distance reward
                 distance_grid[i, j, 0] = compute_distance([x, y], ref_position)
                 distance_grid[i, j, 1] = compute_distance_reward(
-                    ref_position, [x, y],
-                    distance_max=50., distance_threshold=36.5,
+                    ref_position, [x, y], distance_threshold=36.5,
                     threshold_offset=5.)
                 # Calculate orientation reward
                 orientation_grid[i, j] = compute_orientation_reward(
@@ -132,12 +166,12 @@ if __name__ == '__main__':
 
     # Plot the reward heatmap
     if plot_all:
-        plot_reward_heatmap(x_grid, y_grid, r_dist_ori,
-                            'Position and orientation rewards')
-        plot_reward_heatmap(x_grid, y_grid, r_orientation,
-                            f'Orientation {target_orientation:.4f} rad rewards')
         plot_reward_heatmap(x_grid, y_grid, r_distance,
                             'Position rewards')
+        plot_reward_heatmap(x_grid, y_grid, r_orientation,
+                            f'Orientation {target_orientation:.4f} rad rewards')
+        plot_reward_heatmap(x_grid, y_grid, r_dist_ori,
+                            'Position and orientation rewards')
 
     # Plot the direction derivative scalar
     distance_d = calculate_reward_derivative(x_grid, y_grid,

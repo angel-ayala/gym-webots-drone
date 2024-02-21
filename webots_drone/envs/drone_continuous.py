@@ -20,6 +20,7 @@ from webots_drone.utils import check_flipped
 from webots_drone.utils import check_near_object
 from webots_drone.reward import compute_orientation_reward
 from webots_drone.reward import compute_distance_reward
+from webots_drone.reward import compute_distance_diff
 from webots_drone.reward import sum_and_normalize as sum_rewards
 
 from .preprocessor import info2obs_1d
@@ -80,7 +81,7 @@ class DroneEnvContinuous(gym.Env):
         self._max_no_action_steps = seconds2steps(max_no_action_seconds, 1,
                                                   self.sim.timestep)
         self._frame_skip = frame_skip
-        self._goal_threshold = [self.sim.risk_distance, goal_threshold]
+        self._goal_threshold = goal_threshold
         self._fire_pos = fire_pos
         self._fire_dim = fire_dim
         self.flight_area = self.sim.get_flight_area(altitude_limits)
@@ -114,9 +115,14 @@ class DroneEnvContinuous(gym.Env):
         if self.is_pixels:
             state = info2image(state_data, output_size=self.obs_shape[-1])
         else:
-            state = info2obs_1d(state_data)
+            xyz_ranges = list(zip(*self.flight_area))
+            xyz_velocities = [4., 4., 1.]
+            state = info2obs_1d(state_data, xyz_ranges, xyz_velocities)
 
         return state, state_data
+
+    def compute_risk_dist(self, threshold=0.):
+        return self.sim.get_risk_distance(threshold)
 
     def __no_action_limit(self, position):
         if len(self.last_info.keys()) == 0:
@@ -130,23 +136,30 @@ class DroneEnvContinuous(gym.Env):
 
     def __is_final_state(self, info):
         discount = 0
-        end = False
         # no action limit
         if self.__no_action_limit(info["position"]):
             logger.info(f"[{info['timestamp']}] Final state, Same position")
             discount -= 100.
-            end = True
             info['final'] = 'No Action'
         # is_flipped
         elif check_flipped(info["orientation"], info["dist_sensors"]):
             logger.info(f"[{info['timestamp']}] Final state, Flipped")
             discount -= 100.
-            end = True
             info['final'] = 'Flipped'
+        # outside flight area
+        elif any(check_flight_area(info["position"], self.flight_area)):
+            logger.info(f"[{info['timestamp']}] Final state, OutFlightArea")
+            discount -= 100.
+            info['final'] = 'OutFlightArea'
+        # risk zone trespassing
+        elif self.sim.get_target_distance() < self.compute_risk_dist():
+            logger.info(f"[{info['timestamp']}] Final state, InsideRiskZone")
+            discount -= 100.
+            info['final'] = 'InsideRiskZone'
 
-        return discount, end
+        return discount
 
-    def __compute_penalization(self, info, curr_distance):
+    def __compute_penalization(self, info):
         near_object_threshold = [150 / 4000,  # front left
                                  150 / 4000,  # front right
                                  150 / 3200,  # rear top
@@ -162,23 +175,13 @@ class DroneEnvContinuous(gym.Env):
         if any(check_near_object(info["dist_sensors"],
                                  near_object_threshold)):
             logger.info(f"[{info['timestamp']}] Warning state, ObjectNear")
-            penalization -= 10
+            penalization -= 25
             penalization_str += 'ObjectNear|'
-        # outside flight area
-        if any(check_flight_area(info["position"], self.flight_area)):
-            logger.info(f"[{info['timestamp']}] Warning state, OutFlightArea")
-            penalization -= 10
-            penalization_str += 'OutFlightArea|'
         # is_collision
         if any(check_collision(info["dist_sensors"])):
             logger.info(f"[{info['timestamp']}] Warning state, Near2Collision")
-            penalization -= 10
+            penalization -= 50
             penalization_str += 'Near2Collision|'
-        # risk zone trespassing
-        if curr_distance < self.sim.risk_distance:
-            logger.info(f"[{info['timestamp']}] Warning state, InsideRiskZone")
-            penalization -= 10
-            penalization_str += 'InsideRiskZone'
 
         if len(penalization_str) > 0:
             info['penalization'] = penalization_str
@@ -199,9 +202,9 @@ class DroneEnvContinuous(gym.Env):
         info['penalization'] = 'no'
         info['final'] = 'no'
         # terminal states
-        discount, end = self.__is_final_state(info)
-        if end:
-            self._end = end
+        discount = self.__is_final_state(info)
+        if discount < 0:
+            self._end = True
             return discount
 
         # 2 dimension considered
@@ -214,20 +217,18 @@ class DroneEnvContinuous(gym.Env):
         target_xy = self.sim.get_target_pos()[:2]
 
         # not terminal, must be avoided
-        goal_distance = compute_distance(uav_pos_t1, target_xy)
-        penalization = self.__compute_penalization(info, goal_distance)
-        if penalization != 0:
+        penalization = self.__compute_penalization(info)
+        if penalization < 0:
             return penalization
 
         # compute reward components
+        distance_diff = compute_distance_diff(target_xy, uav_pos_t, uav_pos_t1)
         orientation_reward = compute_orientation_reward(uav_pos_t, uav_ori,
                                                         target_xy)
         distance_reward = compute_distance_reward(
-            uav_pos_t, target_xy, distance_max=50.,
-            distance_threshold=np.sum(self._goal_threshold),
-            threshold_offset=self._goal_threshold[1])
-
-        distance_diff = compute_distance(uav_pos_t, uav_pos_t1)
+            uav_pos_t, target_xy,
+            distance_threshold=self.compute_risk_dist(self._goal_threshold),
+            threshold_offset=self._goal_threshold)
         reward = sum_rewards(orientation_reward, distance_reward,
                              distance_diff=distance_diff)
 
@@ -265,7 +266,8 @@ class DroneEnvContinuous(gym.Env):
         # restart simulation
         self.seed(seed)
         self.sim.reset()
-        self.sim.set_fire(self._fire_pos, *self._fire_dim)
+        self.sim.set_fire(self._fire_pos, *self._fire_dim,
+                          dist_threshold=self._goal_threshold * 1.5)
         self.sim.play_fast()
         self.sim.sync()
         self.lift_uav(self.init_altitude)
@@ -282,7 +284,6 @@ class DroneEnvContinuous(gym.Env):
             reward += obs_reward  # step reward
             if self._end:
                 break
-        reward /= i + 1
 
         # timeout limit
         if self.__time_limit():
