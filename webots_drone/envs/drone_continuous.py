@@ -6,7 +6,6 @@ Created on Fri May 29 19:11:52 2020
 @author: Angel Ayala <angel4ayala [at] gmail.com>
 """
 import gym
-import cv2
 import numpy as np
 
 from gym import spaces, logger
@@ -18,10 +17,7 @@ from webots_drone.utils import check_flight_area
 from webots_drone.utils import check_collision
 from webots_drone.utils import check_flipped
 from webots_drone.utils import check_near_object
-from webots_drone.reward import compute_orientation_reward
-from webots_drone.reward import compute_distance_reward
-from webots_drone.reward import compute_distance_diff
-from webots_drone.reward import sum_and_normalize as sum_rewards
+from webots_drone.reward import compute_target_distance_reward
 
 from .preprocessor import info2obs_1d
 from .preprocessor import info2image
@@ -86,7 +82,6 @@ class DroneEnvContinuous(gym.Env):
         self._fire_dim = fire_dim
         self.flight_area = self.sim.get_flight_area(altitude_limits)
         self.init_altitude = init_altitude
-
         self.viewer = None
 
     def init_runtime_vars(self):
@@ -146,11 +141,6 @@ class DroneEnvContinuous(gym.Env):
             logger.info(f"[{info['timestamp']}] Final state, Flipped")
             discount -= 100.
             info['final'] = 'Flipped'
-        # outside flight area
-        elif any(check_flight_area(info["position"], self.flight_area)):
-            logger.info(f"[{info['timestamp']}] Final state, OutFlightArea")
-            discount -= 100.
-            info['final'] = 'OutFlightArea'
         # risk zone trespassing
         elif self.sim.get_target_distance() < self.compute_risk_dist():
             logger.info(f"[{info['timestamp']}] Final state, InsideRiskZone")
@@ -182,6 +172,11 @@ class DroneEnvContinuous(gym.Env):
             logger.info(f"[{info['timestamp']}] Warning state, Near2Collision")
             penalization -= 50
             penalization_str += 'Near2Collision|'
+        # outside flight area
+        if any(check_flight_area(info["position"], self.flight_area)):
+            logger.info(f"[{info['timestamp']}] Final state, OutFlightArea")
+            penalization -= 100.
+            penalization_str = 'OutFlightArea|'
 
         if len(penalization_str) > 0:
             info['penalization'] = penalization_str
@@ -201,11 +196,6 @@ class DroneEnvContinuous(gym.Env):
         """
         info['penalization'] = 'no'
         info['final'] = 'no'
-        # terminal states
-        discount = self.__is_final_state(info)
-        if discount < 0:
-            self._end = True
-            return discount
 
         # 2 dimension considered
         if len(self.last_info.keys()) == 0:
@@ -213,24 +203,24 @@ class DroneEnvContinuous(gym.Env):
         else:
             uav_pos_t = self.last_info['position'][:2]  # pos_t
         uav_pos_t1 = info['position'][:2]  # pos_t+1
-        uav_ori = info['north_rad']
         target_xy = self.sim.get_target_pos()[:2]
+
+        # compute reward components
+        reward = compute_target_distance_reward(
+            target_xy, uav_pos_t, uav_pos_t1,
+            distance_threshold=self.compute_risk_dist(self._goal_threshold),
+            threshold_offset=self._goal_threshold)
 
         # not terminal, must be avoided
         penalization = self.__compute_penalization(info)
         if penalization < 0:
-            return penalization
+            reward += penalization
 
-        # compute reward components
-        distance_diff = compute_distance_diff(target_xy, uav_pos_t, uav_pos_t1)
-        orientation_reward = compute_orientation_reward(uav_pos_t, uav_ori,
-                                                        target_xy)
-        distance_reward = compute_distance_reward(
-            uav_pos_t, target_xy,
-            distance_threshold=self.compute_risk_dist(self._goal_threshold),
-            threshold_offset=self._goal_threshold)
-        reward = sum_rewards(orientation_reward, distance_reward,
-                             distance_diff=distance_diff)
+        # terminal states
+        discount = self.__is_final_state(info)
+        if discount < 0:
+            self._end = True
+            reward += discount
 
         return reward
 

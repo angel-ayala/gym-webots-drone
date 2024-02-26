@@ -413,10 +413,7 @@ class WebotsSimulation(Supervisor):
 
 if __name__ == '__main__':
     import cv2
-    from webots_drone.reward import compute_distance_reward
-    from webots_drone.reward import compute_orientation_reward
-    from webots_drone.reward import compute_distance_diff
-    from webots_drone.reward import sum_and_normalize as sum_rewards
+    from webots_drone.reward import compute_target_distance_reward
 
     def print_control_keys():
         """Display manual control message."""
@@ -510,6 +507,9 @@ if __name__ == '__main__':
         controller.sync()
         run_flag = True
         prev_state = dict()
+        frame_skip = 25
+        step = 0
+        accum_reward = 0
 
         print('Fire scene is running')
         while (run_flag):  # and drone.getTime() < 30):
@@ -534,26 +534,24 @@ if __name__ == '__main__':
             uav_ori = state_data['north_rad']
             target_xy = controller.get_target_pos()[:2]
             # compute reward components
-            orientation_reward = compute_orientation_reward(uav_pos_t, uav_ori,
-                                                            target_xy)
-            curr_distance = compute_distance(target_xy, uav_pos_t1)
-            distance_reward = compute_distance_reward(
-                uav_pos_t, target_xy, 
+            curr_distance = compute_distance(target_xy, uav_pos_t)
+            next_distance = compute_distance(target_xy, uav_pos_t1)
+            distance_diff = np.round(curr_distance - next_distance, 3)
+            distance_diff *= np.abs(distance_diff) > 0.003
+            reward = compute_target_distance_reward(
+                target_xy, uav_pos_t, uav_pos_t1,
                 distance_threshold=controller.get_risk_distance(goal_threshold),
                 threshold_offset=goal_threshold)
-
-            # distance_diff = compute_distance(uav_pos_t, uav_pos_t1)
-            distance_diff = compute_distance_diff(target_xy, uav_pos_t, uav_pos_t1)
-            reward_nodiff = sum_rewards(orientation_reward, distance_reward)
-            reward = sum_rewards(orientation_reward, distance_reward,
-                                 distance_diff=distance_diff)
-            # reward = -1. + distance_diff * 100
-            print(f"pos_t: {uav_pos_t[0]:.3f} {uav_pos_t[1]:.3f}"\
+            accum_reward += reward
+            if step % frame_skip == 0:
+                print(f"pos_t: {uav_pos_t[0]:.3f} {uav_pos_t[1]:.3f}"\
                   f" - post_t+1: {uav_pos_t1[0]:.3f} {uav_pos_t1[1]:.3f}"\
-                      f" -> reward ({reward_nodiff:.4f}) {reward:.4f}"\
+                      f" -> reward ({reward:.4f}) {accum_reward:.4f}"\
                       f" diff: {distance_diff:.4f} ({curr_distance:.4f}/{controller.get_risk_distance(goal_threshold):.4f})")
+                accum_reward = 0
 
             prev_state = state_data.copy()
+            step += 1
         if show:
             cv2.destroyAllWindows()
 

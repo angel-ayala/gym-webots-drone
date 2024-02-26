@@ -11,7 +11,7 @@ from webots_drone.utils import compute_distance
 from webots_drone.utils import compute_orientation
 
 
-def compute_direction_vector(position, orientation, ref_position):
+def compute_direction_vector(ref_position, position, orientation):
     # Calculate the vector pointing from the agent's position to the target position
     vector_to_target = np.array(ref_position) - np.array(position)
 
@@ -25,22 +25,20 @@ def compute_direction_vector(position, orientation, ref_position):
     return norm_vector_to_target, agent_forward_vector
 
 
-def compute_orientation_reward(position, orientation, ref_position):
+def compute_orientation_reward(ref_position, position, orientation):
     # Get direction vectors
     direction_to_target, agent_forward = compute_direction_vector(
-        position, orientation, ref_position)
+        ref_position, position, orientation)
 
     # Calculate cosine similarity between the direction to the target and agent's forward direction
     cosine_similarity = np.dot(direction_to_target, agent_forward)
 
-    if cosine_similarity < 0.85:
-        cosine_similarity = -1.
-
     return cosine_similarity
 
 
-def compute_distance_reward(position, ref_position, distance_threshold=25.,
-                            threshold_offset=5.):
+def compute_current_distance_reward(ref_position, position,
+                                    distance_threshold=25.,
+                                    threshold_offset=5.):
     curr_distance = compute_distance(position, ref_position)
     safety_distance = distance_threshold - threshold_offset / 2
     reward = 1 - abs(1 - curr_distance / safety_distance)
@@ -52,18 +50,31 @@ def compute_distance_reward(position, ref_position, distance_threshold=25.,
     return reward
 
 
-def compute_distance_diff(ref_position, pos_t, pos_t1):
-    distance_t = compute_distance(ref_position, pos_t)
-    distance_t1 = compute_distance(ref_position, pos_t1)
-    return distance_t - distance_t1
-
-
-def sum_and_normalize(orientation_rewards, distance_rewards, distance_diff=1.):
-    r_distance_d = np.sign(distance_diff)
+def sum_and_normalize(distance_rewards, orientation_rewards, distance_diff=1.):
     r_distance = (distance_rewards + 1.) / 2.
     r_orientation = (orientation_rewards + 1.) / 2.
+    r_distance_d = np.sign(distance_diff)
     r_sum = r_distance_d * 3. + r_distance * 2. + r_orientation * 0.1
     return r_sum
+
+
+def compute_target_distance_reward(ref_position, pos_t, pos_t1,
+                                   distance_threshold=25.,
+                                   threshold_offset=5.):
+    distance_t = compute_distance(ref_position, pos_t)
+    distance_t1 = compute_distance(ref_position, pos_t1)
+
+    if distance_t1 < distance_threshold - threshold_offset:
+        return -100.
+
+    if distance_t1 < distance_threshold:
+        return 100.
+
+    dist_vals = [-0.01, -1., 1.]
+    r_distance = np.round(distance_t - distance_t1, 3)
+    r_distance *= np.abs(r_distance) > 0.003  # prevent rotation diff
+    r_distance = dist_vals[int(np.sign(r_distance) + 1)]
+    return r_distance
 
 
 if __name__ == '__main__':
@@ -82,32 +93,15 @@ if __name__ == '__main__':
         for i, x in enumerate(x_values):
             for j, y in enumerate(y_values):
                 # Calculate distance reward
-                distance_grid[i, j, 0] = compute_distance([x, y], ref_position)
-                distance_grid[i, j, 1] = compute_distance_reward(
+                distance_grid[i, j, 0] = compute_distance(ref_position, [x, y])
+                distance_grid[i, j, 1] = compute_current_distance_reward(
                     ref_position, [x, y], distance_threshold=36.5,
                     threshold_offset=5.)
                 # Calculate orientation reward
                 orientation_grid[i, j] = compute_orientation_reward(
-                    [x, y], ref_orientation, ref_position)
+                    ref_position, [x, y], ref_orientation)
 
         return x_grid, y_grid, orientation_grid, distance_grid
-
-    def calculate_reward_derivative(x_grid, y_grid, reward_grid):
-        dx = x_grid[0, 1] - x_grid[0, 0]  # Step size in x direction
-        dy = y_grid[0, 0] - y_grid[1, 0]  # Step size in y direction
-
-        # Compute the derivatives using central differences
-        d_reward_dx = np.gradient(reward_grid, axis=0) / dx
-        d_reward_dy = np.gradient(reward_grid, axis=1) / dy
-
-        # Normalize
-        d_reward_dx_norm = (d_reward_dx + 1) / 2.
-        d_reward_dy_norm = (d_reward_dy + 1) / 2.
-
-        # Compute total derivatives
-        total_derivative = np.sqrt(d_reward_dx_norm**2 + d_reward_dy_norm**2)
-
-        return total_derivative
 
     def plot_reward_heatmap(x_grid, y_grid, reward_grid, title):
         plt.figure(figsize=(8, 6))
@@ -133,7 +127,7 @@ if __name__ == '__main__':
 
     r_orientation = orientation_grid
     r_distance = distance_grid[:, :, 1]
-    r_dist_ori = sum_and_normalize(r_orientation, r_distance)
+    r_dist_ori = sum_and_normalize(r_distance, r_orientation)
 
     print('distance_rewards', r_distance.min(), r_distance.max())
     print('orientation_rewards', r_orientation.min(), r_orientation.max())
@@ -147,18 +141,3 @@ if __name__ == '__main__':
                             f'Orientation {target_orientation:.4f} rad rewards')
         plot_reward_heatmap(x_grid, y_grid, r_dist_ori,
                             'Position and orientation rewards')
-
-    # Plot the direction derivative scalar
-    distance_d = calculate_reward_derivative(x_grid, y_grid,
-                                             distance_grid[:, :, 0])
-    print('distance_d', distance_d.min(), distance_d.max())
-
-    if plot_all:
-        plot_reward_heatmap(x_grid, y_grid, distance_d,
-                     'Distance derivative of X and Y rewards')
-
-    r_dist_ori_d = sum_and_normalize(r_orientation, r_distance,
-                                     distance_diff=distance_d)
-    print('r_dist_ori_d', r_dist_ori_d.min(), r_dist_ori_d.max())
-    plot_reward_heatmap(x_grid, y_grid, r_dist_ori_d,
-                        'Position, orientation, and distance derivatives rewards')
