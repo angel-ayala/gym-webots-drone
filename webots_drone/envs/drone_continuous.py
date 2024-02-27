@@ -269,7 +269,11 @@ class DroneEnvContinuous(gym.Env):
     def step(self, action):
         """Perform an action step in the simulation scene."""
         reward = 0
-        for i in range(self._frame_skip):
+        # reaction time
+        react_frames = self.np_random.integers(low=self._frame_skip - 5,
+                                              high=self._frame_skip + 5,
+                                              endpoint=True)
+        for i in range(react_frames):
             observation, obs_reward, info = self.perform_action(action)
             reward += obs_reward  # step reward
             if self._end:
