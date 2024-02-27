@@ -141,11 +141,6 @@ class DroneEnvContinuous(gym.Env):
             logger.info(f"[{info['timestamp']}] Final state, Flipped")
             discount -= 100.
             info['final'] = 'Flipped'
-        # risk zone trespassing
-        elif self.sim.get_target_distance() < self.compute_risk_dist():
-            logger.info(f"[{info['timestamp']}] Final state, InsideRiskZone")
-            discount -= 100.
-            info['final'] = 'InsideRiskZone'
 
         return discount
 
@@ -164,19 +159,24 @@ class DroneEnvContinuous(gym.Env):
         # object_near
         if any(check_near_object(info["dist_sensors"],
                                  near_object_threshold)):
-            logger.info(f"[{info['timestamp']}] Warning state, ObjectNear")
+            logger.info(f"[{info['timestamp']}] Penalty state, ObjectNear")
             penalization -= 25
             penalization_str += 'ObjectNear|'
         # is_collision
         if any(check_collision(info["dist_sensors"])):
-            logger.info(f"[{info['timestamp']}] Warning state, Near2Collision")
-            penalization -= 50
+            logger.info(f"[{info['timestamp']}] Penalty state, Near2Collision")
+            penalization -= 10
             penalization_str += 'Near2Collision|'
         # outside flight area
         if any(check_flight_area(info["position"], self.flight_area)):
-            logger.info(f"[{info['timestamp']}] Final state, OutFlightArea")
-            penalization -= 100.
+            logger.info(f"[{info['timestamp']}] Penalty state, OutFlightArea")
+            penalization -= 50.
             penalization_str = 'OutFlightArea|'
+        # risk zone trespassing
+        if self.sim.get_target_distance() < self.compute_risk_dist():
+            logger.info(f"[{info['timestamp']}] Penalty state, InsideRiskZone")
+            penalization -= 25.
+            penalization_str = 'InsideRiskZone|'
 
         if len(penalization_str) > 0:
             info['penalization'] = penalization_str
