@@ -65,7 +65,7 @@ def compute_target_distance_reward(ref_position, pos_t, pos_t1,
     distance_t1 = compute_distance(ref_position, pos_t1)
 
     if distance_t1 < distance_threshold - threshold_offset:
-        return -1.
+        return -5.
 
     if distance_t1 < distance_threshold:
         return 100.
