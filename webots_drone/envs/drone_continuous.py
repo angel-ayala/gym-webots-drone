@@ -17,7 +17,7 @@ from webots_drone.utils import check_flight_area
 from webots_drone.utils import check_collision
 from webots_drone.utils import check_flipped
 from webots_drone.utils import check_near_object
-from webots_drone.reward import compute_target_distance_reward
+from webots_drone.reward import compute_position2target_reward
 
 from .preprocessor import info2obs_1d
 from .preprocessor import info2image
@@ -203,13 +203,14 @@ class DroneEnvContinuous(gym.Env):
         else:
             uav_pos_t = self.last_info['position'][:2]  # pos_t
         uav_pos_t1 = info['position'][:2]  # pos_t+1
+        uav_ori_t1 = info['north_rad']  # orientation_t+1
         target_xy = self.sim.get_target_pos()[:2]
 
         # compute reward components
-        reward = compute_target_distance_reward(
-            target_xy, uav_pos_t, uav_pos_t1,
+        reward = compute_position2target_reward(
+            target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
             distance_threshold=self.compute_risk_dist(self._goal_threshold),
-            threshold_offset=self._goal_threshold)
+            disstance_offset=self._goal_threshold)
 
         # not terminal, must be avoided
         penalization = self.__compute_penalization(info)
@@ -251,12 +252,14 @@ class DroneEnvContinuous(gym.Env):
 
         self.perform_action([0., 0., 0., 0.])  # no action
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None, fire_pos=None, **kwargs):
         """Reset episode in the Webots simulation."""
         # restart simulation
         self.seed(seed)
         self.sim.reset()
-        self.sim.set_fire(self._fire_pos, *self._fire_dim,
+        if fire_pose is None:
+            fire_pos = self._fire_pos
+        self.sim.set_fire(fire_pos, *self._fire_dim,
                           dist_threshold=self._goal_threshold * 1.5)
         self.sim.play_fast()
         self.sim.sync()

@@ -155,6 +155,7 @@ def check_collision(sensors):
     # filter sensors at the bottom
     return near_object[:6] + near_object[-1:]
 
+
 def compute_flight_area(rc_pos, offset):
     flight_area = [
         [rc_pos[0] - offset[0][0],
@@ -165,3 +166,11 @@ def compute_flight_area(rc_pos, offset):
          offset[1][2],]
         ]
     return flight_area
+
+
+def flight_area_norm_position(position, flight_area):
+    position_norm = np.zeros_like(position, dtype=np.float32)
+    for i, coord in enumerate(position):
+        position_norm[i] = min_max_norm(coord, -1, 1,
+                                        flight_area[0][i], flight_area[1][i])
+    return position_norm

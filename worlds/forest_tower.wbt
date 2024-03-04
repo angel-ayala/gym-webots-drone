@@ -20,11 +20,11 @@ DEF World WorldInfo {
   }
 }
 Viewpoint {
-  orientation -0.17133181402046713 0.16961806272936963 0.9705025101978828 1.6108247722246791
-  position 0.10685001965701016 -10.43822672078715 15.176500155406801
+  orientation -0.5773502691896258 0.5773502691896258 0.5773502691896258 2.0944
+  position 0.003835383610931061 -0.05262558735179222 164.2876686787551
   near 0.2
   follow "Mavic 2 PRO"
-  followType "Mounted Shot"
+  followType "None"
 }
 TexturedBackground {
   texture "noon_park_empty"
@@ -109,8 +109,8 @@ Solid {
 }
 DEF FireSmoke FireSmoke {
   translation 0 40 0.5
-  fireHeight 12.769389698745128
-  fireRadius 1.5181178932102077
+  fireHeight 7
+  fireRadius 3.5
 }
 DEF Drone Mavic2Pro {
   translation 0 0 11.437

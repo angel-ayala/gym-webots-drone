@@ -11,7 +11,8 @@ import numpy as np
 import gym
 from gym import spaces
 
-from ..utils import min_max_norm
+from webots_drone.utils import min_max_norm
+from webots_drone.utils import flight_area_norm_position
 
 
 def seconds2steps(seconds, frame_skip, step_time):
@@ -180,4 +181,35 @@ class MultiModalObservation(gym.Wrapper):
             new_obs = (self.env_rgb.observation(None),
                        self.env_vector.observation(None))
 
+        return new_obs, info
+
+class TargetVectorObservation(gym.Wrapper):
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+        obs_shape = np.asarray(self.env.observation_space.shape)
+        obs_shape[-1] += 5
+        self.observation_space = spaces.Box(low=float('-inf'), high=float('inf'),
+                                            shape=obs_shape, dtype=np.float32)
+        self.target_pos = np.zeros((3,), dtype=np.float32)
+        self.target_dim = np.zeros((2,), dtype=np.float32)
+    
+    def _compute_target_delta(self, info):
+        delta_pos = np.subtract(info['target_position'], info['position'])
+        delta_pos = flight_area_norm_position(delta_pos, self.env.flight_area)
+        return delta_pos
+
+    def step(self, action):
+        obs, rews, terminateds, truncateds, info = self.env.step(action)
+        # adding target vector, expecting info2obs_1d
+        self.target_pos = self._compute_target_delta(info)
+        new_obs = np.hstack((obs, self.target_pos, self.target_dim))
+        return new_obs, rews, terminateds, truncateds, info
+
+    def reset(self, **kwargs):
+        """Resets the environment and normalizes the observation."""
+        obs, info = self.env.reset(**kwargs)
+        self.target_pos = self._compute_target_delta(info)
+        self.target_dim = np.array(info['target_dim'])
+        self.target_dim /= 10.
+        new_obs = np.hstack((obs, self.target_pos, self.target_dim))
         return new_obs, info
