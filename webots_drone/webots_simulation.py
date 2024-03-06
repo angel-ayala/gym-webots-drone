@@ -235,15 +235,13 @@ class WebotsSimulation(Supervisor):
 
         # avoid to the fire appears near the drone's initial position
         must_do = 0
+        directions = [(-1, 1), (1, 1),
+                      (1, -1), (-1, -1)]
         while self.get_target_distance() <= self.get_risk_distance(dist_threshold):
             # randomize position offset
             offset = self.np_random.uniform(0.1, 1.)
-            if must_do % 2 == 0:
-                new_fire_pos[0] += offset
-                new_fire_pos[1] -= offset
-            else:
-                new_fire_pos[0] -= offset
-                new_fire_pos[1] += offset
+            new_fire_pos[0] += offset * directions[must_do % 4][0]
+            new_fire_pos[1] += offset * directions[must_do % 4][1]
             must_do += 1
             self.set_fire_position(new_fire_pos)
 
@@ -413,7 +411,8 @@ class WebotsSimulation(Supervisor):
 
 if __name__ == '__main__':
     import cv2
-    from webots_drone.reward import compute_target_distance_reward
+    from envs.preprocessor import info2obs_1d
+    from webots_drone.reward import compute_position2target_reward
 
     def print_control_keys():
         """Display manual control message."""
@@ -498,59 +497,59 @@ if __name__ == '__main__':
 
         # Start simulation with random FireSmoke position
         goal_threshold = 5.
-        fire_pos=[-40, 40]
-        fire_dim=[7., 3.5]
+        fire_pos = [50, -50]
+        fire_dim = [7., 3.5]
+        altitude_limits = [11., 75.]
         controller.seed()
         controller.set_fire(fire_pos=fire_pos, fire_height=fire_dim[0],
-                            fire_radius=fire_dim[1], dist_threshold=goal_threshold)
+                            fire_radius=fire_dim[1],
+                            dist_threshold=goal_threshold)
         controller.play()
         controller.sync()
         run_flag = True
-        prev_state = dict()
+        prev_state = list()
         frame_skip = 25
         step = 0
         accum_reward = 0
+        # capture initial state
+        state = controller.get_data()
+        next_state = controller.get_data()
 
         print('Fire scene is running')
         while (run_flag):  # and drone.getTime() < 30):
-            action, run_flag = get_kb_action(kb)
-
-            disturbances = dict(disturbances=action)
-            # perform action
-            controller.send_data(disturbances)
-
-            # capture state
-            state_data = controller.get_data()
-            if show and state_data is not None:
-                cv2.imshow("Drone's live view", state_data['image'])
-                cv2.waitKey(1)
-
             # 2 dimension considered
-            if len(prev_state.keys()) == 0:
-                uav_pos_t = state_data['position'][:2]  # pos_t+1
-            else:
-                uav_pos_t = prev_state['position'][:2]  # pos_t
-            uav_pos_t1 = state_data['position'][:2]  # pos_t+1
-            uav_ori = state_data['north_rad']
+            uav_pos_t = state['position'][:2]  # pos_t
+            uav_pos_t1 = next_state['position'][:2]  # pos_t+1
+            uav_ori_t1 = next_state['north_rad']
             target_xy = controller.get_target_pos()[:2]
             # compute reward components
             curr_distance = compute_distance(target_xy, uav_pos_t)
             next_distance = compute_distance(target_xy, uav_pos_t1)
             distance_diff = np.round(curr_distance - next_distance, 3)
             distance_diff *= np.abs(distance_diff) > 0.003
-            reward = compute_target_distance_reward(
-                target_xy, uav_pos_t, uav_pos_t1,
+            reward = compute_position2target_reward(
+                target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
                 distance_threshold=controller.get_risk_distance(goal_threshold),
-                threshold_offset=goal_threshold)
+                distance_offset=goal_threshold)
             accum_reward += reward
             if step % frame_skip == 0:
                 print(f"pos_t: {uav_pos_t[0]:.3f} {uav_pos_t[1]:.3f}"\
-                  f" - post_t+1: {uav_pos_t1[0]:.3f} {uav_pos_t1[1]:.3f}"\
+                  f" - post_t+1: {uav_pos_t1[0]:.3f} {uav_pos_t1[1]:.3f} (N:{uav_ori_t1:.3f})"\
                       f" -> reward ({reward:.4f}) {accum_reward:.4f}"\
-                      f" diff: {distance_diff:.4f} ({curr_distance:.4f}/{controller.get_risk_distance(goal_threshold):.4f})")
+                      f" diff: {distance_diff:.4f} ({curr_distance:.4f}/{controller.get_risk_distance(goal_threshold/2.):.4f})")
                 accum_reward = 0
 
-            prev_state = state_data.copy()
+            state = next_state.copy()
+            # capture action
+            action, run_flag = get_kb_action(kb)
+            disturbances = dict(disturbances=action)
+            # perform action
+            controller.send_data(disturbances)
+            # capture state
+            next_state = controller.get_data()
+            if show and next_state is not None:
+                cv2.imshow("Drone's live view", next_state['image'])
+                cv2.waitKey(1)
             step += 1
         if show:
             cv2.destroyAllWindows()

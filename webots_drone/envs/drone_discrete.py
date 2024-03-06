@@ -31,7 +31,7 @@ class DroneEnvDiscrete(DroneEnvContinuous):
                  goal_threshold=5.,
                  init_altitude=25.,
                  altitude_limits=[11, 75],
-                 fire_pos=[-40, 40],
+                 fire_pos=2,
                  fire_dim=[7., 3.5],
                  is_pixels=True):
         super(DroneEnvDiscrete, self).__init__(

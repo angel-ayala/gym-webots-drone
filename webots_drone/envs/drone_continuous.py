@@ -39,7 +39,7 @@ class DroneEnvContinuous(gym.Env):
                  goal_threshold=5.,
                  init_altitude=25.,
                  altitude_limits=[11, 75],
-                 fire_pos=[-40, 40],
+                 fire_pos=2,
                  fire_dim=[7., 3.5],
                  is_pixels=True):
         # Simulation controller
@@ -80,9 +80,16 @@ class DroneEnvContinuous(gym.Env):
         self._goal_threshold = goal_threshold
         self._fire_pos = fire_pos
         self._fire_dim = fire_dim
-        self.flight_area = self.sim.get_flight_area(altitude_limits)
+        self.flight_area = np.array(self.sim.get_flight_area(altitude_limits))
         self.init_altitude = init_altitude
         self.viewer = None
+        self.cuadrants = np.array(
+            [(self.flight_area[0][0], self.flight_area[1][1]),
+             (self.flight_area[1][0], self.flight_area[1][1]),
+             (self.flight_area[1][0], self.flight_area[0][1]),
+             (self.flight_area[0][0], self.flight_area[0][1])])
+        self.cuadrants /= 2.
+
 
     def init_runtime_vars(self):
         self._episode_steps = 0  # time limit control
@@ -102,6 +109,20 @@ class DroneEnvContinuous(gym.Env):
         seed2 = (seed1 + 1) % 2**31
         self.sim.seed(seed2)
         return [seed1, seed2]
+
+    def set_fire_position(self, position, noise_ratio=0.):
+        offset = 0
+        if self.np_random.random() < noise_ratio:
+            offset = self.np_random.random()
+        self.sim.set_fire(position + offset, *self._fire_dim,
+                          dist_threshold=self._goal_threshold * 1.5)
+
+    def set_fire_cuadrant(self, cuadrant=None, noise_ratio=0.):
+        logger.info(f"Starting fire in cuadrant {cuadrant} with {noise_ratio} noise.")
+        if cuadrant is None:
+            cuadrant = self.np_random.integers(4)
+        fire_pos = np.array(self.cuadrants[cuadrant])
+        self.set_fire_position(fire_pos, noise_ratio=noise_ratio)
 
     def get_state(self):
         """Process the image to get a RGB image."""
@@ -123,7 +144,7 @@ class DroneEnvContinuous(gym.Env):
         if len(self.last_info.keys()) == 0:
             return False
         diff_pos = compute_distance(position, self.last_info['position'])
-        if diff_pos <= 0.01:
+        if diff_pos <= 0.003:
             self._no_action_steps += 1
         else:
             self._no_action_steps = 0
@@ -210,7 +231,7 @@ class DroneEnvContinuous(gym.Env):
         reward = compute_position2target_reward(
             target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
             distance_threshold=self.compute_risk_dist(self._goal_threshold),
-            disstance_offset=self._goal_threshold)
+            distance_offset=self._goal_threshold)
 
         # not terminal, must be avoided
         penalization = self.__compute_penalization(info)
@@ -252,15 +273,15 @@ class DroneEnvContinuous(gym.Env):
 
         self.perform_action([0., 0., 0., 0.])  # no action
 
-    def reset(self, seed=None, fire_pos=None, **kwargs):
+    def reset(self, seed=None, fire_cuadrant=None, **kwargs):
         """Reset episode in the Webots simulation."""
         # restart simulation
         self.seed(seed)
         self.sim.reset()
-        if fire_pose is None:
-            fire_pos = self._fire_pos
-        self.sim.set_fire(fire_pos, *self._fire_dim,
-                          dist_threshold=self._goal_threshold * 1.5)
+        if fire_cuadrant is None:
+            self.set_fire_cuadrant(self._fire_pos)
+        else:
+            self.set_fire_cuadrant(fire_cuadrant)
         self.sim.play_fast()
         self.sim.sync()
         self.lift_uav(self.init_altitude)

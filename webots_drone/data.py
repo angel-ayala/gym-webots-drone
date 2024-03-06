@@ -286,8 +286,8 @@ class ExperimentData:
         u_t = None
         for step in range(len(state)):
             x_t = state[step] if step == 0 else state[step] - next_state[step]
-            yield x_t, u_t
             u_t = action[step].copy()
+            yield x_t, u_t
 
 
 
