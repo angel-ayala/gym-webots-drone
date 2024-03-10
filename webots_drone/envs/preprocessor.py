@@ -13,6 +13,7 @@ from gym import spaces
 
 from webots_drone.utils import min_max_norm
 from webots_drone.utils import flight_area_norm_position
+from webots_drone.stack import ObservationStack
 
 
 def seconds2steps(seconds, frame_skip, step_time):
@@ -137,28 +138,42 @@ def crop_from_center(img):
 
 class MultiModalObservation(gym.Wrapper):
     def __init__(self, env: gym.Env, shape1=(3, 84, 84), shape2=(22, ),
-                 frame_stack=1):
+                 frame_stack=1, add_target=False):
         super().__init__(env)
         self.rgb_obs = spaces.Box(low=0, high=1, shape=shape1,
                                   dtype=np.float32)
         self.vector_obs = spaces.Box(low=float('-inf'), high=float('inf'),
                                      shape=shape2, dtype=np.float32)
         self.frame_stack = frame_stack
+        self.add_target = add_target
+        if add_target:
+            obs_shape = np.asarray(shape2) + 5
+            self.vector_obs = spaces.Box(low=float('-inf'), high=float('inf'),
+                                         shape=obs_shape, dtype=np.float32)
+
         if frame_stack > 1:
             env.observation_space = self.rgb_obs
-            self.env_rgb = gym.wrappers.FrameStack(env, num_stack=frame_stack)
+            self.env_rgb = ObservationStack(env, k=frame_stack)
             self.rgb_obs = self.env_rgb.observation_space
             env.observation_space = self.vector_obs
-            self.env_vector = gym.wrappers.FrameStack(env, num_stack=frame_stack)
+            self.env_vector = ObservationStack(env, k=frame_stack)
             self.vector_obs = self.env_vector.observation_space
 
         self.observation_space = spaces.Tuple((self.rgb_obs, self.vector_obs))
 
+    def add_1d_target(self, obs, info):
+        delta_pos = np.subtract(info['target_position'], info['position'])
+        delta_pos = flight_area_norm_position(delta_pos, self.env.flight_area)
+        target_dim = np.array(info['target_dim']) / 10.
+        return np.hstack((obs, delta_pos, target_dim))
+
     def step(self, action):
-        obs, rews, terminateds, truncateds, infos = self.env.step(action)
+        obs, rews, terminateds, truncateds, info = self.env.step(action)
         # order sensors by dimension and split
-        obs_2d = info2image(infos, output_size=self.rgb_obs.shape[-1])
-        obs_1d = info2obs_1d(infos)
+        obs_2d = info2image(info, output_size=self.rgb_obs.shape[-1])
+        obs_1d = info2obs_1d(info)
+        if self.add_target:
+            obs_1d = self.add_1d_target(obs_1d, info)
         new_obs = (obs_2d, obs_1d)
         if self.frame_stack > 1:
             self.env_rgb.frames.append(obs_2d)
@@ -166,13 +181,15 @@ class MultiModalObservation(gym.Wrapper):
             new_obs = (self.env_rgb.observation(None),
                        self.env_vector.observation(None))
 
-        return new_obs, rews, terminateds, truncateds, infos
+        return new_obs, rews, terminateds, truncateds, info
 
     def reset(self, **kwargs):
         """Resets the environment and normalizes the observation."""
         obs, info = self.env.reset(**kwargs)
         obs_2d = info2image(info, output_size=self.rgb_obs.shape[-1])
         obs_1d = info2obs_1d(info)
+        if self.add_target:
+            obs_1d = self.add_1d_target(obs_1d, info)
         new_obs = (obs_2d, obs_1d)
         if self.frame_stack > 1:
             for _ in range(self.num_stack):
@@ -182,6 +199,7 @@ class MultiModalObservation(gym.Wrapper):
                        self.env_vector.observation(None))
 
         return new_obs, info
+
 
 class TargetVectorObservation(gym.Wrapper):
     def __init__(self, env: gym.Env):
@@ -213,3 +231,24 @@ class TargetVectorObservation(gym.Wrapper):
         self.target_dim /= 10.
         new_obs = np.hstack((obs, self.target_pos, self.target_dim))
         return new_obs, info
+
+
+class ReducedVectorObservation(gym.Wrapper):
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+        self.obs_shape = (13, )
+        self.obs_type = np.float32
+        self.observation_space = gym.spaces.Box(
+            low=float('-inf'), high=float('inf'),
+            shape=self.obs_shape, dtype=self.obs_type)
+    def observation(self, obs):
+        return obs[:13]
+
+    def step(self, action):
+        obs, rews, terminateds, truncateds, infos = self.env.step(action)
+        return self.observation(obs), rews, terminateds, truncateds, infos
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+
+        return self.observation(obs), info

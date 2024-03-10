@@ -91,7 +91,14 @@ class DroneEnvContinuous(gym.Env):
              (self.flight_area[1][0], self.flight_area[0][1]),
              (self.flight_area[0][0], self.flight_area[0][1])])
         self.cuadrants /= 2.
-        self.reward_limits = [-2., 3.2]
+        self.reward_limits = [-2. - (2.21 * self._frame_inter[0]), 
+                              3.21 * self._frame_inter[1]]
+
+    def norm_reward(self, reward):
+        reward = min_max_norm(reward - 1e-8,  # avoids zero values
+                              -1, 1, self.reward_limits[0],
+                              self.reward_limits[1])
+        return reward
 
 
     def init_runtime_vars(self):
@@ -158,12 +165,12 @@ class DroneEnvContinuous(gym.Env):
         # no action limit
         if self.__no_action_limit(info["position"]):
             logger.info(f"[{info['timestamp']}] Final state, Same position")
-            discount -= 10.
+            discount -= 2.
             info['final'] = 'No Action'
         # is_flipped
         elif check_flipped(info["orientation"], info["dist_sensors"]):
             logger.info(f"[{info['timestamp']}] Final state, Flipped")
-            discount -= 10.
+            discount -= 2.
             info['final'] = 'Flipped'
 
         return discount
@@ -312,10 +319,8 @@ class DroneEnvContinuous(gym.Env):
             self._end = True
             info['final'] = 'time_limit'
 
-        # normalize step reward        
-        reward = min_max_norm(reward,  # avoids zero values
-                              -1, 1, self.reward_limits[0] * i + 1,
-                              self.reward_limits[1] * i + 1)
+        # normalize step reward
+        reward = self.norm_reward(reward)
 
         self.last_state, self.last_info = observation, info
 
