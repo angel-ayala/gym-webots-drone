@@ -66,16 +66,34 @@ def compute_distance_diff_scalar(distance_diff, diff_thr=0.003):
     # r_diff = [2., -2., -1.]
     # r_diff = [1., 0., 0.01]  # for testing
     # r_diff = [1., -2., -0.01]
-    # r_diff = [1., -1., -0.1]
+    abs_diff = np.abs(distance_diff)
+    r_diff = [abs_diff * 2, -1., -abs_diff]
     distance_diff = np.round(distance_diff, 3)
-    distance_diff *= np.abs(distance_diff) > diff_thr
+    distance_diff *= abs_diff > diff_thr
     # idx_diff = (np.sign(distance_diff) + 1).astype(int)
     # if isinstance(distance_diff, (list, np.ndarray)):
     #     s_distance = apply_fn_list(idx_diff, lambda x: r_diff[x])
     # else:
     #     s_distance = r_diff[idx_diff]
     # return s_distance
-    return distance_diff
+    return r_diff[int(np.sign(distance_diff) + 1)]
+
+
+def compute_velocity_reward(velocity, pos_thr=0.003):
+    # benefits distance reduction
+    velocity_abs = np.abs(velocity)
+    # ensure position difference
+    velocity = np.round(velocity, 3)
+    velocity *= velocity_abs > pos_thr
+    if velocity == 0.:
+        # if no move
+        return -1.
+    if velocity > 0.:
+        # if move oppposite to target's direction
+        return 0.
+    if velocity < 0.:
+        # if move to target's direction
+        return velocity_abs
 
 
 def compare_direction(x, y, direction):
@@ -141,17 +159,21 @@ def compute_position2target_reward(ref_position, pos_t, pos_t1, orientation_t1,
     # normalize and sum
     r_sum = normalize_and_mul(r_distance, r_orientation)
     # compute distance momentum factor
-    dist_t = abs(compute_distance(ref_position, pos_t) - d_central)
-    r_sum *= compute_distance_diff_scalar(dist_t - abs(dist_t1 - d_central))
+    dist_tc = compute_distance(ref_position, pos_t) - d_central
+    dist_t1c = dist_t1 - d_central
+    # r_sum = -0.1 + compute_distance_diff_scalar(dist_t1c - dist_tc)
+    r_vel = compute_velocity_reward(dist_t1c - dist_tc)
 
-    # penalty off-distance
-    if dist_t1 < distance_threshold - distance_offset:
-        r_sum -= 25.
-    # bonus in-distance
-    elif dist_t1 < distance_threshold:
-        r_sum += 50.
+    # # penalty off-distance
+    # if dist_t1 < distance_threshold - distance_offset:
+    #     r_vel -= 2. - r_orientation
+    # # bonus in-distance
+    # elif dist_t1 < distance_threshold:
+    #     r_vel += 2. + r_orientation
+    if distance_threshold - distance_offset < dist_t1 < distance_threshold:
+        r_vel += 2
 
-    return r_sum
+    return r_vel
 
 
 if __name__ == '__main__':
@@ -271,13 +293,20 @@ if __name__ == '__main__':
     plot_reward_heatmap(x_grid, y_grid, p_distance2, 'Absolute centered position')
     # Aproachin (neg diff)
     d_pos_up = calculate_distance_derivative(x_grid, y_grid, p_distance2, ['up', 'left'], norm=False)
-    plot_reward_heatmap(x_grid, y_grid, d_pos_up, 'Negative position difference')
+    plot_reward_heatmap(x_grid, y_grid, -d_pos_up, 'Negative position difference')
+    
+    
+    up_factor = apply_fn_list(-d_pos_up, compute_velocity_reward)
+    
+    
     up_factor = compute_distance_diff_scalar(d_pos_up)
     plot_reward_heatmap(x_grid, y_grid, up_factor, 'Negative position difference')
     plot_reward_heatmap(x_grid, y_grid, r_dist_ori * up_factor, 'Distance and orientation times up_factor')
     # Distance (pos diff)
     d_pos_down = calculate_distance_derivative(x_grid, y_grid, p_distance2, ['down', 'right'], norm=False)
+    plot_reward_heatmap(x_grid, y_grid, d_pos_down, 'Positive position difference')
     down_factor = compute_distance_diff_scalar(d_pos_down)
+    down_factor = apply_fn_list(d_pos_down, compute_velocity_reward)
     plot_reward_heatmap(x_grid, y_grid, down_factor, 'Positive position difference')
     plot_reward_heatmap(x_grid, y_grid, r_dist_ori * down_factor, 'Distance and orientation times down_factor')
     # No diff

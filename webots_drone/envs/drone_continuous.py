@@ -17,6 +17,7 @@ from webots_drone.utils import check_flight_area
 from webots_drone.utils import check_collision
 from webots_drone.utils import check_flipped
 from webots_drone.utils import check_near_object
+from webots_drone.utils import min_max_norm
 from webots_drone.reward import compute_position2target_reward
 
 from .preprocessor import info2obs_1d
@@ -77,6 +78,7 @@ class DroneEnvContinuous(gym.Env):
         self._max_no_action_steps = seconds2steps(max_no_action_seconds, 1,
                                                   self.sim.timestep)
         self._frame_skip = frame_skip
+        self._frame_inter = [frame_skip - 5., frame_skip + 5.]
         self._goal_threshold = goal_threshold
         self._fire_pos = fire_pos
         self._fire_dim = fire_dim
@@ -89,6 +91,7 @@ class DroneEnvContinuous(gym.Env):
              (self.flight_area[1][0], self.flight_area[0][1]),
              (self.flight_area[0][0], self.flight_area[0][1])])
         self.cuadrants /= 2.
+        self.reward_limits = [-2., 2.]
 
 
     def init_runtime_vars(self):
@@ -155,12 +158,12 @@ class DroneEnvContinuous(gym.Env):
         # no action limit
         if self.__no_action_limit(info["position"]):
             logger.info(f"[{info['timestamp']}] Final state, Same position")
-            discount -= 100.
+            discount -= 10.
             info['final'] = 'No Action'
         # is_flipped
         elif check_flipped(info["orientation"], info["dist_sensors"]):
             logger.info(f"[{info['timestamp']}] Final state, Flipped")
-            discount -= 100.
+            discount -= 10.
             info['final'] = 'Flipped'
 
         return discount
@@ -181,22 +184,22 @@ class DroneEnvContinuous(gym.Env):
         if any(check_near_object(info["dist_sensors"],
                                  near_object_threshold)):
             logger.info(f"[{info['timestamp']}] Penalty state, ObjectNear")
-            penalization -= 25
+            penalization -= 1.
             penalization_str += 'ObjectNear|'
         # is_collision
         if any(check_collision(info["dist_sensors"])):
             logger.info(f"[{info['timestamp']}] Penalty state, Near2Collision")
-            penalization -= 10
+            penalization -= 2.
             penalization_str += 'Near2Collision|'
         # outside flight area
         if any(check_flight_area(info["position"], self.flight_area)):
             logger.info(f"[{info['timestamp']}] Penalty state, OutFlightArea")
-            penalization -= 50.
+            penalization -= 2.
             penalization_str = 'OutFlightArea|'
         # risk zone trespassing
         if self.sim.get_target_distance() < self.compute_risk_dist():
             logger.info(f"[{info['timestamp']}] Penalty state, InsideRiskZone")
-            penalization -= 25.
+            penalization -= 2.
             penalization_str = 'InsideRiskZone|'
 
         if len(penalization_str) > 0:
@@ -294,9 +297,9 @@ class DroneEnvContinuous(gym.Env):
         """Perform an action step in the simulation scene."""
         reward = 0
         # reaction time
-        react_frames = self.np_random.integers(low=self._frame_skip - 5,
-                                              high=self._frame_skip + 5,
-                                              endpoint=True)
+        react_frames = self.np_random.integers(low=self._frame_inter[0],
+                                               high=self._frame_inter[1],
+                                               endpoint=True)
         for i in range(react_frames):
             observation, obs_reward, info = self.perform_action(action)
             reward += obs_reward  # step reward
@@ -308,6 +311,11 @@ class DroneEnvContinuous(gym.Env):
             logger.info(f"[{info['timestamp']}] Final state, Time limit")
             self._end = True
             info['final'] = 'time_limit'
+
+        # normalize step reward
+        reward = min_max_norm(reward, -1, 1,
+                              self.reward_limits[0] * i + 1,
+                              self.reward_limits[1] * i + 1)
 
         self.last_state, self.last_info = observation, info
 
