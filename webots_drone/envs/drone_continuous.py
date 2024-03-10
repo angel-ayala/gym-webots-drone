@@ -91,7 +91,7 @@ class DroneEnvContinuous(gym.Env):
              (self.flight_area[1][0], self.flight_area[0][1]),
              (self.flight_area[0][0], self.flight_area[0][1])])
         self.cuadrants /= 2.
-        self.reward_limits = [-2., 2.]
+        self.reward_limits = [-2., 3.2]
 
 
     def init_runtime_vars(self):
@@ -312,9 +312,9 @@ class DroneEnvContinuous(gym.Env):
             self._end = True
             info['final'] = 'time_limit'
 
-        # normalize step reward
-        reward = min_max_norm(reward, -1, 1,
-                              self.reward_limits[0] * i + 1,
+        # normalize step reward        
+        reward = min_max_norm(reward,  # avoids zero values
+                              -1, 1, self.reward_limits[0] * i + 1,
                               self.reward_limits[1] * i + 1)
 
         self.last_state, self.last_info = observation, info
