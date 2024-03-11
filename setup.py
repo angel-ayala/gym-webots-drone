@@ -12,7 +12,7 @@ data_files.append(('share/' + package_name + '/protos',
 
 setup(
     name=package_name,
-    version='1.1.0',    
+    version='1.4.0',    
     description='Gym wrapper for Webots simulations scene with the DJI Mavic Pro 2 drone',
     url='https://github.com/angel-ayala/gym-webots-drone',
     author='Angel Ayala',
