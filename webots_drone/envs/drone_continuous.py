@@ -96,8 +96,8 @@ class DroneEnvContinuous(gym.Env):
 
     def norm_reward(self, reward):
         reward = min_max_norm(reward - 1e-8,  # avoids zero values
-                              -1, 1, self.reward_limits[0],
-                              self.reward_limits[1])
+                                  -0.25, 1, self.reward_limits[0],
+                                  self.reward_limits[1])
         return reward
 
 
