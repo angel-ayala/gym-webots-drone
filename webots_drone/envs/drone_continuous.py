@@ -96,8 +96,8 @@ class DroneEnvContinuous(gym.Env):
 
     def norm_reward(self, reward):
         reward = min_max_norm(reward - 1e-8,  # avoids zero values
-                                  -0.25, 1, self.reward_limits[0],
-                                  self.reward_limits[1])
+                              -1., 2., self.reward_limits[0],
+                              self.reward_limits[1])
         return reward
 
 
@@ -133,17 +133,23 @@ class DroneEnvContinuous(gym.Env):
             cuadrant = self.np_random.integers(4)
         fire_pos = np.array(self.cuadrants[cuadrant])
         self.set_fire_position(fire_pos, noise_ratio=noise_ratio)
+    
+    def get_observation_2d(self, state_data):
+        return info2image(state_data, output_size=self.obs_shape[-1])
+    
+    def get_observation_1d(self, state_data):
+        xyz_ranges = list(zip(*self.flight_area))
+        xyz_velocities = [4., 4., 1.]
+        return info2obs_1d(state_data, xyz_ranges, xyz_velocities)
 
     def get_state(self):
-        """Process the image to get a RGB image."""
+        """Process the environment to get a state."""
         state_data = self.sim.get_data()
 
         if self.is_pixels:
-            state = info2image(state_data, output_size=self.obs_shape[-1])
+            state = self.get_observation_2d(state_data)
         else:
-            xyz_ranges = list(zip(*self.flight_area))
-            xyz_velocities = [4., 4., 1.]
-            state = info2obs_1d(state_data, xyz_ranges, xyz_velocities)
+            state = self.get_observation_1d(state_data)
 
         return state, state_data
 
@@ -276,6 +282,15 @@ class DroneEnvContinuous(gym.Env):
         diff_altitude = float('inf')
         lift_action = [0., 0., 0., self.sim.limits[1][3]]
         logger.info("Lifting the drone...")
+        # wait for lift momentum
+        while diff_altitude > 13.:
+            _, _, info = self.perform_action(lift_action)
+            diff_altitude = altitude - info['position'][2]  # Z axis diff
+        # change vertical position
+        tpos = info['position']
+        tpos[2] = self.init_altitude - 0.1
+        self.sim.drone_node['set_pos'](tpos)
+        # wait for altitude
         while diff_altitude > 0:
             _, _, info = self.perform_action(lift_action)
             diff_altitude = altitude - info['position'][2]  # Z axis diff
@@ -320,7 +335,7 @@ class DroneEnvContinuous(gym.Env):
             info['final'] = 'time_limit'
 
         # normalize step reward
-        reward = self.norm_reward(reward)
+        # reward = self.norm_reward(reward)
 
         self.last_state, self.last_info = observation, info
 

@@ -134,7 +134,8 @@ class WebotsSimulation(Supervisor):
         self.drone_node = dict(
             node=drone_node,
             get_pos=lambda: np.array(
-                drone_node.getField('translation').getSFVec3f())
+                drone_node.getField('translation').getSFVec3f()),
+            set_pos=drone_node.getField('translation').setSFVec3f
         )
 
     def init_nodes(self):

@@ -167,17 +167,22 @@ class MultiModalObservation(gym.Wrapper):
         target_dim = np.array(info['target_dim']) / 10.
         return np.hstack((obs, delta_pos, target_dim))
 
-    def step(self, action):
-        obs, rews, terminateds, truncateds, info = self.env.step(action)
+    def get_state(self):
+        """Process the environment to get a state."""
+        state_data = self.env.sim.get_data()
         # order sensors by dimension and split
-        obs_2d = info2image(info, output_size=self.rgb_obs.shape[-1])
-        obs_1d = info2obs_1d(info)
+        state_2d = self.env.get_observation_2d(state_data)
+        state_1d = self.env.get_observation_1d(state_data)
         if self.add_target:
-            obs_1d = self.add_1d_target(obs_1d, info)
-        new_obs = (obs_2d, obs_1d)
+            state_1d = self.add_1d_target(state_1d, state_data)
+        return state_2d, state_1d
+
+    def step(self, action):
+        _, rews, terminateds, truncateds, info = self.env.step(action)
+        new_obs = self.get_state()
         if self.frame_stack > 1:
-            self.env_rgb.frames.append(obs_2d)
-            self.env_vector.frames.append(obs_1d)
+            self.env_rgb.frames.append(new_obs[0])
+            self.env_vector.frames.append(new_obs[1])
             new_obs = (self.env_rgb.observation(None),
                        self.env_vector.observation(None))
 
@@ -185,16 +190,12 @@ class MultiModalObservation(gym.Wrapper):
 
     def reset(self, **kwargs):
         """Resets the environment and normalizes the observation."""
-        obs, info = self.env.reset(**kwargs)
-        obs_2d = info2image(info, output_size=self.rgb_obs.shape[-1])
-        obs_1d = info2obs_1d(info)
-        if self.add_target:
-            obs_1d = self.add_1d_target(obs_1d, info)
-        new_obs = (obs_2d, obs_1d)
+        _, info = self.env.reset(**kwargs)
+        new_obs = self.get_state()
         if self.frame_stack > 1:
             for _ in range(self.num_stack):
-                self.env_rgb.frames.append(obs_2d)
-                self.env_vector.frames.append(obs_1d)
+                self.env_rgb.frames.append(new_obs[0])
+                self.env_vector.frames.append(new_obs[1])
             new_obs = (self.env_rgb.observation(None),
                        self.env_vector.observation(None))
 
@@ -210,7 +211,7 @@ class TargetVectorObservation(gym.Wrapper):
                                             shape=obs_shape, dtype=np.float32)
         self.target_pos = np.zeros((3,), dtype=np.float32)
         self.target_dim = np.zeros((2,), dtype=np.float32)
-    
+
     def _compute_target_delta(self, info):
         delta_pos = np.subtract(info['target_position'], info['position'])
         delta_pos = flight_area_norm_position(delta_pos, self.env.flight_area)
