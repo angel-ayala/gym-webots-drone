@@ -182,7 +182,7 @@ class MultiModalObservation(gym.Wrapper):
         new_obs = self.get_state()
         if self.frame_stack > 1:
             self.env_rgb.frames.append(new_obs[0])
-            self.env_vector.frames.append(new_obs[1])
+            self.env_vector.frames.append(new_obs[1][np.newaxis, ...])
             new_obs = (self.env_rgb.observation(None),
                        self.env_vector.observation(None))
 
@@ -193,9 +193,9 @@ class MultiModalObservation(gym.Wrapper):
         _, info = self.env.reset(**kwargs)
         new_obs = self.get_state()
         if self.frame_stack > 1:
-            for _ in range(self.num_stack):
+            for _ in range(self.frame_stack):
                 self.env_rgb.frames.append(new_obs[0])
-                self.env_vector.frames.append(new_obs[1])
+                self.env_vector.frames.append(new_obs[1][np.newaxis, ...])
             new_obs = (self.env_rgb.observation(None),
                        self.env_vector.observation(None))
 
