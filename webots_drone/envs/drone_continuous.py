@@ -20,9 +20,11 @@ from webots_drone.utils import check_near_object
 from webots_drone.utils import min_max_norm
 from webots_drone.reward import compute_position2target_reward
 
-from .preprocessor import info2obs_1d
-from .preprocessor import info2image
 from .preprocessor import seconds2steps
+from .preprocessor import info2image
+from .preprocessor import normalize_pixels
+from .preprocessor import info2obs_1d
+from .preprocessor import normalize_vector
 
 
 
@@ -134,13 +136,19 @@ class DroneEnvContinuous(gym.Env):
         fire_pos = np.array(self.cuadrants[cuadrant])
         self.set_fire_position(fire_pos, noise_ratio=noise_ratio)
     
-    def get_observation_2d(self, state_data):
-        return info2image(state_data, output_size=self.obs_shape[-1])
+    def get_observation_2d(self, state_data, norm=True):
+        state_2d = info2image(state_data, output_size=self.obs_shape[-1])
+        if norm:
+            state_2d = normalize_pixels(state_2d)
+        return state_2d
     
-    def get_observation_1d(self, state_data):
+    def get_observation_1d(self, state_data, norm=False):
         xyz_ranges = list(zip(*self.flight_area))
         xyz_velocities = [4., 4., 1.]
-        return info2obs_1d(state_data, xyz_ranges, xyz_velocities)
+        state_1d = info2obs_1d(state_data, xyz_ranges, xyz_velocities)
+        if norm:
+            state_1d = normalize_vector(state_1d)
+        return state_1d
 
     def get_state(self):
         """Process the environment to get a state."""

@@ -62,8 +62,6 @@ def info2image(info, output_size):
                              interpolation=cv2.INTER_AREA)
         # channel first
         rgb_obs = np.swapaxes(rgb_obs, 2, 0)
-        # normalize
-        rgb_obs = preprocess_pixels(rgb_obs)
     return rgb_obs
 
 
@@ -79,10 +77,8 @@ def info2obs_1d(infos, xyz_ranges, xyz_velocities):
     vector_state = info2state(infos)
     # normalize
     sensor_attitude = state2inertial(vector_state)
-    sensor_attitude = preprocess_angles(sensor_attitude)
     sensor_position = state2position(vector_state)
-    sensor_position = preprocess_position(sensor_position, *xyz_ranges, *xyz_velocities)
-    sensor_north = vector_state[-1] / np.pi
+    sensor_north = vector_state[-1]
     sensor_distance = info2distance(infos)
     # sensor_emitter = info2emitter_vector(infos)
     obs_1d = np.hstack((sensor_attitude, sensor_position,
@@ -97,10 +93,11 @@ def preprocess_orientation(orientation):
     return orientation
 
 
-def preprocess_pixels(obs):
+def normalize_pixels(obs):
     return obs.astype(np.float32) / 255.
 
-def preprocess_position(obs, x_range, y_range, z_range, x_vel, y_vel, z_vel):
+
+def normalize_position(obs, x_range, y_range, z_range, x_vel, y_vel, z_vel):
     # Normalize position
     obs[0] = min_max_norm(obs[0], a=-1, b=1, minx=x_range[0], maxx=x_range[1])
     obs[1] = min_max_norm(obs[1], a=-1, b=1, minx=y_range[0], maxx=y_range[1])
@@ -112,7 +109,7 @@ def preprocess_position(obs, x_range, y_range, z_range, x_vel, y_vel, z_vel):
     return obs
 
 
-def preprocess_angles(obs):
+def normalize_angles(obs):
     # Normalize Euler angles
     obs[0] = min_max_norm(obs[0], a=-1, b=1, minx=-np.pi, maxx=np.pi)
     obs[1] = min_max_norm(obs[1], a=-1, b=1, minx=-np.pi/2, maxx=np.pi/2)
@@ -122,6 +119,14 @@ def preprocess_angles(obs):
     obs[4] = min_max_norm(obs[4], a=-1, b=1, minx=-np.pi/2, maxx=np.pi/2)
     obs[5] = min_max_norm(obs[5], a=-1, b=1, minx=-np.pi, maxx=np.pi)
     return obs
+
+
+def normalize_vector(vector):
+    norm_vector = vector.copy()
+    norm_vector[:6] = normalize_angles(norm_vector[:6])
+    norm_vector[6:12] = normalize_position(norm_vector[6:12])
+    norm_vector[13] /= np.pi
+    return norm_vector
 
 
 def crop_from_center(img):
