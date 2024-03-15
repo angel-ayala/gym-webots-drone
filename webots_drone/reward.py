@@ -58,27 +58,6 @@ def apply_fn_list(array, fn):
     return new_array
 
 
-def compute_distance_diff_scalar(distance_diff, diff_thr=0.003):
-    # benefits distance reduction
-    # r_diff = [1., -2., -0.1]
-    # r_diff = [10., -5., -1.]
-    # r_diff = [1., 0.001, 0.01]  # keeps doing circles
-    # r_diff = [2., -2., -1.]
-    # r_diff = [1., 0., 0.01]  # for testing
-    # r_diff = [1., -2., -0.01]
-    abs_diff = np.abs(distance_diff)
-    r_diff = [abs_diff * 2, -1., -abs_diff]
-    distance_diff = np.round(distance_diff, 3)
-    distance_diff *= abs_diff > diff_thr
-    # idx_diff = (np.sign(distance_diff) + 1).astype(int)
-    # if isinstance(distance_diff, (list, np.ndarray)):
-    #     s_distance = apply_fn_list(idx_diff, lambda x: r_diff[x])
-    # else:
-    #     s_distance = r_diff[idx_diff]
-    # return s_distance
-    return r_diff[int(np.sign(distance_diff) + 1)]
-
-
 def compute_velocity_reward(velocity, pos_thr=0.003):
     # benefits distance reduction
     velocity_abs = np.abs(velocity)
@@ -90,7 +69,7 @@ def compute_velocity_reward(velocity, pos_thr=0.003):
         return -1.
     if velocity > 0.:
         # if move oppposite to target's direction
-        return 0.
+        return -velocity_abs
     if velocity < 0.:
         # if move to target's direction
         return velocity_abs
@@ -130,16 +109,14 @@ def compute_distance_reward(distance, d_central=None, distance_threshold=25.,
     r_distance = 1. - abs(1. - curr_distance / d_central)
     r_distance = add_scales(r_distance, curr_distance, d_central,
                             thr_offset=threshold_offset, n_segments=n_segments)
-    if distance_threshold > curr_distance > distance_threshold - threshold_offset:
+    if distance_threshold - threshold_offset < curr_distance < distance_threshold:
         r_distance *= 2.
 
     return r_distance
 
 
-def normalize_and_mul(distance_rewards, orientation_rewards):
-    r_distance = (distance_rewards + 1) / 2.
-    r_orientation = (orientation_rewards + 1) / 2.
-    r_sum = distance_rewards + r_orientation * r_distance
+def sum_rewards(distance_rewards, orientation_rewards):
+    r_sum = (distance_rewards + orientation_rewards) / 2.
     return r_sum
 
 
@@ -157,23 +134,18 @@ def compute_position2target_reward(ref_position, pos_t, pos_t1, orientation_t1,
         dist_t1, d_central, distance_threshold=distance_threshold,
         threshold_offset=distance_offset, n_segments=n_segments)
     # normalize and sum
-    r_sum = normalize_and_mul(r_distance, r_orientation)
+    r_sum = sum_rewards(r_distance, r_orientation)
     # compute distance momentum factor
     dist_tc = compute_distance(ref_position, pos_t) - d_central
     dist_t1c = dist_t1 - d_central
-    # r_sum = -0.1 + compute_distance_diff_scalar(dist_t1c - dist_tc)
     r_vel = compute_velocity_reward(dist_t1c - dist_tc)
+    r_sum += r_vel
 
-    # # penalty off-distance
-    # if dist_t1 < distance_threshold - distance_offset:
-    #     r_vel -= 2. - r_orientation
-    # # bonus in-distance
-    # elif dist_t1 < distance_threshold:
-    #     r_vel += 2. + r_orientation
+    # bonus in-distance
     if distance_threshold - distance_offset < dist_t1 < distance_threshold:
-        r_vel += 2
+        r_sum += 2
 
-    return r_vel
+    return r_sum
 
 
 if __name__ == '__main__':
@@ -262,7 +234,7 @@ if __name__ == '__main__':
     p_distance = distance_grid[:, :, 0]
     p_distance2 = -(p_distance - d_central)/ d_central
     r_distance = distance_grid[:, :, 1]
-    r_dist_ori = normalize_and_mul(r_distance, r_orientation)
+    r_dist_ori = sum_rewards(r_distance, r_orientation)
 
     print('distance_rewards', r_distance.min(), r_distance.max())
     print('orientation_rewards', r_orientation.min(), r_orientation.max())
@@ -276,49 +248,30 @@ if __name__ == '__main__':
     plot_reward_heatmap(x_grid, y_grid, r_dist_ori,
                         'Distance and orientation rewards')
     # Plot derivatives
+    # distance
+    # d_distance = calculate_distance_derivative(x_grid, y_grid, r_distance, ['up', 'left'])
+    # plot_reward_heatmap(x_grid, y_grid, d_distance, 'Distance reward derivatives')
+    # orientation
+    # d_orientation = calculate_distance_derivative(x_grid, y_grid, r_orientation, ['up', 'left'])
+    # plot_reward_heatmap(x_grid, y_grid, d_orientation, 'Orientation reward derivatives')
+    # distance + orientation
     d_dist_ori = calculate_distance_derivative(x_grid, y_grid, r_dist_ori, ['up', 'left'])
     plot_reward_heatmap(x_grid, y_grid, d_dist_ori, 'Distance and orientation reward derivatives')
-    # distance
-    d_distance = calculate_distance_derivative(x_grid, y_grid, r_distance, ['up', 'left'])
-    plot_reward_heatmap(x_grid, y_grid, d_distance, 'Distance reward derivatives')
-    # orientation
-    d_orientation = calculate_distance_derivative(x_grid, y_grid, r_orientation, ['up', 'left'])
-    plot_reward_heatmap(x_grid, y_grid, d_orientation, 'Orientation reward derivatives')
-    # distance + orientation
-    d_dist_ori = normalize_and_mul(d_distance, d_orientation)
-    plot_reward_heatmap(x_grid, y_grid, d_dist_ori, 'Distance and orientation rewards derivatives')
 
     # target approximation
-    p_distance2 = np.abs(p_distance - d_central)
-    plot_reward_heatmap(x_grid, y_grid, p_distance2, 'Absolute centered position')
-    # Aproachin (neg diff)
-    d_pos_up = calculate_distance_derivative(x_grid, y_grid, p_distance2, ['up', 'left'], norm=False)
-    plot_reward_heatmap(x_grid, y_grid, -d_pos_up, 'Negative position difference')
-    
-    
-    up_factor = apply_fn_list(-d_pos_up, compute_velocity_reward)
-    
-    
-    up_factor = compute_distance_diff_scalar(d_pos_up)
-    plot_reward_heatmap(x_grid, y_grid, up_factor, 'Negative position difference')
-    plot_reward_heatmap(x_grid, y_grid, r_dist_ori * up_factor, 'Distance and orientation times up_factor')
-    # Distance (pos diff)
-    d_pos_down = calculate_distance_derivative(x_grid, y_grid, p_distance2, ['down', 'right'], norm=False)
-    plot_reward_heatmap(x_grid, y_grid, d_pos_down, 'Positive position difference')
-    down_factor = compute_distance_diff_scalar(d_pos_down)
+    # Going away (pos diff)
+    d_pos_down = calculate_distance_derivative(x_grid, y_grid, p_distance2, ['up', 'left'], norm=False)
     down_factor = apply_fn_list(d_pos_down, compute_velocity_reward)
-    plot_reward_heatmap(x_grid, y_grid, down_factor, 'Positive position difference')
-    plot_reward_heatmap(x_grid, y_grid, r_dist_ori * down_factor, 'Distance and orientation times down_factor')
+    # plot_reward_heatmap(x_grid, y_grid, down_factor, 'Velocity reward (oppposite to target)')
+    plot_reward_heatmap(x_grid, y_grid, r_dist_ori - down_factor, 'Distance and orientation - down_factor')
+    # Aproaching (neg diff)
+    d_pos_up = -d_pos_down
+    up_factor = apply_fn_list(d_pos_up, compute_velocity_reward)
+    # plot_reward_heatmap(x_grid, y_grid, up_factor, 'Velocity reward (towards target)')
+    plot_reward_heatmap(x_grid, y_grid, r_dist_ori + up_factor, 'Distance and orientation + up_factor')
     # No diff
-    no_factor = compute_distance_diff_scalar(np.zeros_like(d_pos_down))
-    plot_reward_heatmap(x_grid, y_grid, no_factor, 'No position difference')
-    plot_reward_heatmap(x_grid, y_grid, r_dist_ori * no_factor, 'Distance and orientation times no_factor')
+    no_factor = apply_fn_list(np.zeros_like(p_distance2), compute_velocity_reward)
+    # plot_reward_heatmap(x_grid, y_grid, no_factor, 'No position difference')
+    plot_reward_heatmap(x_grid, y_grid, r_dist_ori + no_factor, 'Distance and orientation + no_factor')
 
-    # compose = np.abs(r_dist_ori) * down_factor + np.abs(r_dist_ori) * up_factor
-    compose = r_dist_ori * up_factor + r_dist_ori * down_factor + r_dist_ori * no_factor
-    plot_reward_heatmap(x_grid, y_grid, compose, 'Distance and orientation times (up_ + down_ + no_factor)')
-    d_compose = calculate_distance_derivative(x_grid, y_grid, compose, ['up', 'left'], norm=False)
-    plot_reward_heatmap(x_grid, y_grid, d_compose, 'Distance and orientation times (up_ + down_ + no_factor) derivative pos')
-    d_compose = calculate_distance_derivative(x_grid, y_grid, compose, ['down', 'right'], norm=False)
-    plot_reward_heatmap(x_grid, y_grid, d_compose, 'Distance and orientation times (up_ + down_ + no_factor) derivative neg')
 
