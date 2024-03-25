@@ -60,6 +60,8 @@ def info2image(info, output_size):
         # resize
         rgb_obs = cv2.resize(rgb_obs, (output_size, output_size),
                              interpolation=cv2.INTER_AREA)
+        # Transpose observation for correct orientation
+        rgb_obs = np.transpose(rgb_obs, axes=(1, 0, 2))
         # channel first
         rgb_obs = np.swapaxes(rgb_obs, 2, 0)
     return rgb_obs
@@ -94,7 +96,7 @@ def preprocess_orientation(orientation):
 
 
 def normalize_pixels(obs):
-    return obs.astype(np.float32) / 255.
+    return obs / 255.
 
 
 def normalize_position(obs, x_range, y_range, z_range, x_vel, y_vel, z_vel):

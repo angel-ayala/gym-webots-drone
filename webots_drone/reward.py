@@ -42,12 +42,14 @@ def compute_target_orientation_reward(ref_position, position, orientation,
     curr_distance = compute_orientation_reward(ref_position, position,
                                                orientation)
     r_distance = np.copy(curr_distance)
-    r_distance = add_scales(r_distance, curr_distance, 1,
-                            thr_offset=-threshold_offset, n_segments=n_segments,
-                            direction=1)
+    # r_distance = add_scales(r_distance, curr_distance, 1,
+    #                         thr_offset=-threshold_offset, n_segments=n_segments,
+    #                         direction=1)
 
-    if curr_distance >= 1 - threshold_offset:
-        r_distance *= 2.
+    # if curr_distance >= 1 - threshold_offset:
+    #     r_distance *= 2.
+    # if curr_distance <= 1 - threshold_offset:
+    #     r_distance = -1.
     return r_distance
 
 
@@ -66,13 +68,13 @@ def compute_velocity_reward(velocity, pos_thr=0.003):
     velocity *= velocity_abs > pos_thr
     if velocity == 0.:
         # if no move
-        return -1.
+        return -0.5
     if velocity > 0.:
         # if move oppposite to target's direction
-        return -velocity_abs * 10
+        return velocity_abs * -10
     if velocity < 0.:
         # if move to target's direction
-        return velocity_abs * 10
+        return velocity_abs * 100
 
 
 def compare_direction(x, y, direction):
@@ -107,16 +109,20 @@ def compute_distance_reward(distance, d_central=None, distance_threshold=25.,
         d_central = distance_threshold - threshold_offset / 2.
     curr_distance = distance
     r_distance = 1. - abs(1. - curr_distance / d_central)
-    r_distance = add_scales(r_distance, curr_distance, d_central,
-                            thr_offset=threshold_offset, n_segments=n_segments)
-    if distance_threshold - threshold_offset < curr_distance < distance_threshold:
-        r_distance *= 2.
-
+    # r_distance = add_scales(r_distance, curr_distance, d_central,
+    #                         thr_offset=threshold_offset, n_segments=n_segments)
+    # if distance_threshold - threshold_offset < curr_distance < distance_threshold:
+    #     r_distance *= 2.
+    # if curr_distance < distance_threshold:
+        # r_distance -= threshold_offset / 2.
+    # if distance_threshold * 2.5 < curr_distance:
+    #     r_distance = -1.
+    # return (max(-2, r_distance) + 2.) / 3.
     return r_distance
 
 
 def sum_rewards(distance_rewards, orientation_rewards):
-    r_sum = distance_rewards + orientation_rewards * 0.1
+    r_sum = distance_rewards + orientation_rewards
     return r_sum
 
 

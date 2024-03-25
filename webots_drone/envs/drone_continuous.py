@@ -136,7 +136,7 @@ class DroneEnvContinuous(gym.Env):
         fire_pos = np.array(self.cuadrants[cuadrant])
         self.set_fire_position(fire_pos, noise_ratio=noise_ratio)
     
-    def get_observation_2d(self, state_data, norm=True):
+    def get_observation_2d(self, state_data, norm=False):
         state_2d = info2image(state_data, output_size=self.obs_shape[-1])
         if norm:
             state_2d = normalize_pixels(state_2d)
