@@ -68,13 +68,13 @@ def compute_velocity_reward(velocity, pos_thr=0.003):
     velocity *= velocity_abs > pos_thr
     if velocity == 0.:
         # if no move
-        return -0.5
+        return -2.
     if velocity > 0.:
         # if move oppposite to target's direction
         return velocity_abs * -10
     if velocity < 0.:
         # if move to target's direction
-        return velocity_abs * 100
+        return velocity_abs * 20
 
 
 def compare_direction(x, y, direction):
@@ -122,7 +122,7 @@ def compute_distance_reward(distance, d_central=None, distance_threshold=25.,
 
 
 def sum_rewards(distance_rewards, orientation_rewards):
-    r_sum = distance_rewards + orientation_rewards
+    r_sum = distance_rewards * 0.3 + orientation_rewards
     return r_sum
 
 
