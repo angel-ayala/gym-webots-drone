@@ -10,6 +10,7 @@ import numpy as np
 from webots_drone.utils import compute_distance
 from webots_drone.utils import compute_orientation
 from webots_drone.utils import min_max_norm
+from webots_drone.utils import target_mask
 
 
 def compute_direction_vector(ref_position, position, orientation):
@@ -122,7 +123,7 @@ def compute_distance_reward(distance, d_central=None, distance_threshold=25.,
 
 
 def sum_rewards(distance_rewards, orientation_rewards):
-    r_sum = distance_rewards * 0.3 + orientation_rewards
+    r_sum = distance_rewards + orientation_rewards * 0.1
     return r_sum
 
 
@@ -152,6 +153,21 @@ def compute_position2target_reward(ref_position, pos_t, pos_t1, orientation_t1,
         r_sum += 2
 
     return r_sum
+
+
+def compute_visual_reward(observation):
+    reward = 0
+    # channel last
+    observation = np.transpose(observation, axes=(1, 2, 0))
+    obs_shape = observation.shape
+    tmask, tarea, tcenter = target_mask(observation)
+    if tcenter is not None:
+        offset_x = abs(tcenter[0] - obs_shape[0] // 2)
+        offset_y = abs(tcenter[1] - obs_shape[1] // 2)
+        reward = tarea - (offset_x + offset_y)
+        reward /= 800  # empirical desired area 
+    return reward
+    
 
 
 if __name__ == '__main__':

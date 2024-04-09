@@ -174,3 +174,35 @@ def flight_area_norm_position(position, flight_area):
         position_norm[i] = min_max_norm(coord, -1, 1,
                                         flight_area[0][i], flight_area[1][i])
     return position_norm
+
+
+def target_mask(observation):
+    """Compute the visual mask for red objects."""
+    img_hsv = cv2.cvtColor(observation, cv2.COLOR_RGB2HSV)
+    img_hsv = cv2.GaussianBlur(img_hsv, (7, 7), 0)
+
+    # lower mask (0-10)
+    lower_red = np.array([0, 50, 50])
+    upper_red = np.array([10, 255, 255])
+    mask0 = cv2.inRange(img_hsv, lower_red, upper_red)
+
+    # upper mask (170-180)
+    lower_red = np.array([170, 50, 50])
+    upper_red = np.array([180, 255, 255])
+    mask1 = cv2.inRange(img_hsv, lower_red, upper_red)
+
+    # join my masks
+    mask = mask0 + mask1
+    
+    # info 
+    contours, hierarchy = cv2.findContours(mask, 1, 2)
+    area = -1
+    cpoint = None
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area > 20:
+            M = cv2.moments(cnt)
+            cpoint = (int(M['m10']/M['m00']), int(M['m01']/M['m00']))
+            break
+    
+    return mask, area, cpoint

@@ -60,10 +60,8 @@ def info2image(info, output_size):
         # resize
         rgb_obs = cv2.resize(rgb_obs, (output_size, output_size),
                              interpolation=cv2.INTER_AREA)
-        # Transpose observation for correct orientation
-        rgb_obs = np.transpose(rgb_obs, axes=(1, 0, 2))
         # channel first
-        rgb_obs = np.swapaxes(rgb_obs, 2, 0)
+        rgb_obs = np.transpose(rgb_obs, axes=(2, 0, 1))
     return rgb_obs
 
 
@@ -260,3 +258,19 @@ class ReducedVectorObservation(gym.Wrapper):
         obs, info = self.env.reset(**kwargs)
 
         return self.observation(obs), info
+
+
+class ReducedActionSpace(gym.Wrapper):
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+        control_limits = env.action_limits[:, :3]
+        self.action_space = spaces.Box(low=control_limits[0],
+                                       high=control_limits[1],
+                                       shape=(control_limits.shape[-1], ),
+                                       dtype=np.float32)
+    def step(self, action):
+        """Do an action step inside the Webots simulator."""
+        mapped_action = np.hstack((action, [0]))
+        mapped_action = np.clip(mapped_action, *self.env.action_limits)
+
+        return self.env.step(mapped_action)

@@ -19,6 +19,7 @@ from webots_drone.utils import check_flipped
 from webots_drone.utils import check_near_object
 from webots_drone.utils import min_max_norm
 from webots_drone.reward import compute_position2target_reward
+from webots_drone.reward import compute_visual_reward
 
 from .preprocessor import seconds2steps
 from .preprocessor import info2image
@@ -51,10 +52,9 @@ class DroneEnvContinuous(gym.Env):
         logger.info('Connected to Webots')
 
         # Action space, the angles and altitud
-        control_limits = WebotsSimulation.get_control_ranges()
-        self.action_space = spaces.Box(low=control_limits[0],
-                                       high=control_limits[1],
-                                       shape=(control_limits.shape[-1], ),
+        self.action_space = spaces.Box(low=self.action_limits[0],
+                                       high=self.action_limits[1],
+                                       shape=(self.action_limits.shape[-1], ),
                                        dtype=np.float32)
         # Observation space
         self.is_pixels = is_pixels
@@ -95,6 +95,10 @@ class DroneEnvContinuous(gym.Env):
         self.cuadrants /= 2.
         self.reward_limits = [-2. - (2.21 * self._frame_inter[0]), 
                               3.21 * self._frame_inter[1]]
+
+    @property
+    def action_limits(self):
+        return WebotsSimulation.get_control_ranges()
 
     def norm_reward(self, reward):
         reward = min_max_norm(reward - 1e-8,  # avoids zero values
@@ -252,10 +256,11 @@ class DroneEnvContinuous(gym.Env):
         target_xy = self.sim.get_target_pos()[:2]
 
         # compute reward components
-        reward = compute_position2target_reward(
-            target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
-            distance_threshold=self.compute_risk_dist(self._goal_threshold),
-            distance_offset=self._goal_threshold)
+        # reward = compute_position2target_reward(
+        #     target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
+        #     distance_threshold=self.compute_risk_dist(self._goal_threshold),
+        #     distance_offset=self._goal_threshold)
+        reward = compute_visual_reward(obs)
 
         # not terminal, must be avoided
         penalization = self.__compute_penalization(info)
