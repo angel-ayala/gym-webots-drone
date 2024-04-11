@@ -232,9 +232,25 @@ class ExperimentData:
         state_data = filtered_df[state_cols].to_numpy()
         next_state_data = filtered_df[next_state_cols].to_numpy()
         actions_data = np.zeros((len(filtered_df), 4))
+
         for i, (idx, row) in enumerate(filtered_df.iterrows()):
-            actions_data[i] = DroneEnvDiscrete.discrete2continuous(
-                row['action'])
+            if isinstance(row['action'], int):
+                actions_data[i] = DroneEnvDiscrete.discrete2continuous(
+                    row['action'])
+            elif isinstance(row['action'], str):
+                numbers = row['action'].split()
+                if numbers[0] == '[':
+                    numbers = numbers[1:]
+                if numbers[-1] == ']':
+                    numbers = numbers[:-1]
+                daction = " ".join(numbers)
+                daction = daction.replace('[', '').replace(']', '')
+                if len(numbers) == 3:
+                    daction += ' 0.'
+                actions_data[i] = np.fromstring(daction, dtype=np.float32, sep=' ')
+            else:
+                actions_data[i] = row['action']
+
         return state_data, actions_data, next_state_data
 
     def get_trajectory_df(self, episode, iteration):

@@ -19,7 +19,7 @@ from webots_drone.utils import check_flipped
 from webots_drone.utils import check_near_object
 from webots_drone.utils import min_max_norm
 from webots_drone.reward import compute_position2target_reward
-from webots_drone.reward import compute_visual_reward
+# from webots_drone.reward import compute_visual_reward
 
 from .preprocessor import seconds2steps
 from .preprocessor import info2image
@@ -256,11 +256,11 @@ class DroneEnvContinuous(gym.Env):
         target_xy = self.sim.get_target_pos()[:2]
 
         # compute reward components
-        # reward = compute_position2target_reward(
-        #     target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
-        #     distance_threshold=self.compute_risk_dist(self._goal_threshold),
-        #     distance_offset=self._goal_threshold)
-        reward = compute_visual_reward(obs)
+        reward = compute_position2target_reward(
+            target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
+            distance_threshold=self.compute_risk_dist(self._goal_threshold),
+            distance_offset=self._goal_threshold)
+        # reward = compute_visual_reward(obs)
 
         # not terminal, must be avoided
         penalization = self.__compute_penalization(info)
