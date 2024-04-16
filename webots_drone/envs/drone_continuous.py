@@ -147,12 +147,17 @@ class DroneEnvContinuous(gym.Env):
         return state_2d
     
     def get_observation_1d(self, state_data, norm=False):
-        xyz_ranges = list(zip(*self.flight_area))
-        xyz_velocities = [4., 4., 1.]
-        state_1d = info2obs_1d(state_data, xyz_ranges, xyz_velocities)
+        state_1d_t1 = info2obs_1d(state_data)
+        if len(self.last_info.keys()) == 0:
+            return np.zeros_like(state_1d_t1)
+        state_1d_t = info2obs_1d(self.last_info)
+        diff_state = state_1d_t1 - state_1d_t
         if norm:
-            state_1d = normalize_vector(state_1d)
-        return state_1d
+            xyz_ranges = np.ones((3, 2))
+            xyz_ranges[:, 0] *= -1
+            xyz_velocities = [4., 4., 1.]
+            diff_state = normalize_vector(diff_state, xyz_ranges, xyz_velocities)
+        return diff_state
 
     def get_state(self):
         """Process the environment to get a state."""
@@ -161,7 +166,7 @@ class DroneEnvContinuous(gym.Env):
         if self.is_pixels:
             state = self.get_observation_2d(state_data)
         else:
-            state = self.get_observation_1d(state_data)
+            state = self.get_observation_1d(state_data, norm=True)
 
         return state, state_data
 
@@ -260,7 +265,7 @@ class DroneEnvContinuous(gym.Env):
             target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
             distance_threshold=self.compute_risk_dist(self._goal_threshold),
             distance_offset=self._goal_threshold)
-        reward += compute_visual_reward(obs)
+        # reward += compute_visual_reward(obs)
 
         # not terminal, must be avoided
         penalization = self.__compute_penalization(info)
@@ -281,6 +286,7 @@ class DroneEnvContinuous(gym.Env):
         return self._episode_steps >= self._max_episode_steps
 
     def perform_action(self, action):
+        self.last_state, self.last_info = self.get_state()
         constrained_action = self.sim.clip_action(action, self.flight_area)
         # perform action
         command = dict(disturbances=constrained_action)
@@ -324,9 +330,9 @@ class DroneEnvContinuous(gym.Env):
         self.sim.sync()
         self.lift_uav(self.init_altitude)
         self.init_runtime_vars()
-        self.last_state, self.last_info = self.get_state()
+        # self.last_state, self.last_info = self.get_state()
 
-        return self.last_state, self.last_info
+        return self.get_state()
 
     def step(self, action):
         """Perform an action step in the simulation scene."""
@@ -350,9 +356,9 @@ class DroneEnvContinuous(gym.Env):
         # normalize step reward
         # reward = self.norm_reward(reward)
 
-        self.last_state, self.last_info = observation, info
+        # self.last_state, self.last_info = observation, info
 
-        return self.last_state, reward, self._end, False, self.last_info
+        return observation, reward, self._end, False, info
 
     def render(self, mode='human'):
         """Render the environment from Webots simulation."""

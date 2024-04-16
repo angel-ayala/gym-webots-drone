@@ -73,7 +73,7 @@ def info2emitter_vector(info):
     return emitter_vector
 
 
-def info2obs_1d(infos, xyz_ranges, xyz_velocities):
+def info2obs_1d(infos):
     vector_state = info2state(infos)
     # normalize
     sensor_attitude = state2inertial(vector_state)
@@ -121,10 +121,10 @@ def normalize_angles(obs):
     return obs
 
 
-def normalize_vector(vector):
+def normalize_vector(vector, xyz_range, xyz_vel):
     norm_vector = vector.copy()
     norm_vector[:6] = normalize_angles(norm_vector[:6])
-    norm_vector[6:12] = normalize_position(norm_vector[6:12])
+    norm_vector[6:12] = normalize_position(norm_vector[6:12], *xyz_range, *xyz_vel)
     norm_vector[13] /= np.pi
     return norm_vector
 
@@ -139,6 +139,18 @@ def crop_from_center(img):
     result = np.asarray(img[:, center_idx[0]:center_idx[1], :3],
                         dtype=img.dtype)
     return result
+
+
+def append_target(obs, info, flight_area, add_dim=False):
+    target_pos = info['target_position']
+    target_pos[-1] = max(flight_area[0, -1], target_pos[-1])
+    delta_pos = np.subtract(info['position'], target_pos)
+    delta_pos = flight_area_norm_position(delta_pos, flight_area)
+    if add_dim:
+        target_dim = np.array(info['target_dim']) / 10.
+        return np.hstack((obs, delta_pos, target_dim))
+    else:
+        return np.hstack((obs, delta_pos))
 
 
 class MultiModalObservation(gym.Wrapper):
@@ -167,17 +179,14 @@ class MultiModalObservation(gym.Wrapper):
         self.observation_space = spaces.Tuple((self.rgb_obs, self.vector_obs))
 
     def add_1d_target(self, obs, info):
-        delta_pos = np.subtract(info['target_position'], info['position'])
-        delta_pos = flight_area_norm_position(delta_pos, self.env.flight_area)
-        target_dim = np.array(info['target_dim']) / 10.
-        return np.hstack((obs, delta_pos, target_dim))
+        return append_target(obs, info, self.env.flight_area)
 
     def get_state(self):
         """Process the environment to get a state."""
         state_data = self.env.sim.get_data()
         # order sensors by dimension and split
         state_2d = self.env.get_observation_2d(state_data)
-        state_1d = self.env.get_observation_1d(state_data)
+        state_1d = self.env.get_observation_1d(state_data, norm=True)
         if self.add_target:
             state_1d = self.add_1d_target(state_1d, state_data)
         return state_2d, state_1d
@@ -214,28 +223,20 @@ class TargetVectorObservation(gym.Wrapper):
         obs_shape[-1] += 5
         self.observation_space = spaces.Box(low=float('-inf'), high=float('inf'),
                                             shape=obs_shape, dtype=np.float32)
-        self.target_pos = np.zeros((3,), dtype=np.float32)
-        self.target_dim = np.zeros((2,), dtype=np.float32)
 
-    def _compute_target_delta(self, info):
-        delta_pos = np.subtract(info['target_position'], info['position'])
-        delta_pos = flight_area_norm_position(delta_pos, self.env.flight_area)
-        return delta_pos
+    def add_1d_target(self, obs, info):
+        return append_target(obs, info, self.env.flight_area)
 
     def step(self, action):
         obs, rews, terminateds, truncateds, info = self.env.step(action)
         # adding target vector, expecting info2obs_1d
-        self.target_pos = self._compute_target_delta(info)
-        new_obs = np.hstack((obs, self.target_pos, self.target_dim))
+        new_obs = self.add_1d_target(obs, info)
         return new_obs, rews, terminateds, truncateds, info
 
     def reset(self, **kwargs):
         """Resets the environment and normalizes the observation."""
         obs, info = self.env.reset(**kwargs)
-        self.target_pos = self._compute_target_delta(info)
-        self.target_dim = np.array(info['target_dim'])
-        self.target_dim /= 10.
-        new_obs = np.hstack((obs, self.target_pos, self.target_dim))
+        new_obs = self.add_1d_target(obs, info)
         return new_obs, info
 
 
@@ -247,6 +248,7 @@ class ReducedVectorObservation(gym.Wrapper):
         self.observation_space = gym.spaces.Box(
             low=float('-inf'), high=float('inf'),
             shape=self.obs_shape, dtype=self.obs_type)
+
     def observation(self, obs):
         return obs[:13]
 
