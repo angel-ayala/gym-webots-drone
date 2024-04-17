@@ -141,7 +141,7 @@ def crop_from_center(img):
     return result
 
 
-def append_target(obs, info, flight_area, add_dim=False):
+def append_target(obs, info, flight_area, add_dim=True):
     target_pos = info['target_position']
     target_pos[-1] = max(flight_area[0, -1], target_pos[-1])
     delta_pos = np.subtract(info['position'], target_pos)

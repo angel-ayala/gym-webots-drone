@@ -72,7 +72,7 @@ def compute_velocity_reward(velocity, pos_thr=0.003):
         return -1.
     if velocity > 0.:
         # if move oppposite to target's direction
-        return velocity_abs * -100.
+        return velocity_abs * -10.
     if velocity < 0.:
         # if move to target's direction
         return velocity_abs * 100.
@@ -157,7 +157,7 @@ def compute_position2target_reward(ref_position, pos_t, pos_t1, orientation_t1,
 
 def compute_visual_reward(observation):
     reward = 0
-    # channel last
+    # channel first -> last
     observation = np.transpose(observation, axes=(1, 2, 0))
     obs_shape = observation.shape
     tmask, tarea, tcenter = target_mask(observation)

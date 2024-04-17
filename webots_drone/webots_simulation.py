@@ -412,8 +412,12 @@ class WebotsSimulation(Supervisor):
 
 if __name__ == '__main__':
     import cv2
+    import datetime
     from envs.preprocessor import info2obs_1d
+    from envs.preprocessor import info2image
     from webots_drone.reward import compute_position2target_reward
+    from webots_drone.reward import compute_visual_reward
+    from webots_drone.utils import target_mask
 
     def print_control_keys():
         """Display manual control message."""
@@ -434,6 +438,7 @@ if __name__ == '__main__':
         key = kb.getKey()
 
         run_flag = True
+        take_shot = False
         roll_angle = 0.
         pitch_angle = 0.
         yaw_angle = 0.  # drone.yaw_orientation
@@ -464,11 +469,15 @@ if __name__ == '__main__':
             elif key == ord('Q'):
                 print('Terminated')
                 run_flag = False
+            # take photo
+            elif key == ord('P'):
+                print('Camera saved')
+                take_shot = True
             key = kb.getKey()
 
         action = [roll_angle, pitch_angle, yaw_angle, altitude]
         action = controller.clip_action(action, controller.get_flight_area())
-        return action, run_flag
+        return action, run_flag, take_shot
 
     def run(controller, show=True):
         """Run controller's main loop.
@@ -508,6 +517,7 @@ if __name__ == '__main__':
         controller.play()
         controller.sync()
         run_flag = True
+        take_shot = False
         prev_state = list()
         frame_skip = 25
         step = 0
@@ -532,6 +542,9 @@ if __name__ == '__main__':
                 target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
                 distance_threshold=controller.get_risk_distance(goal_threshold),
                 distance_offset=goal_threshold)
+            
+            observation = info2image(next_state, output_size=84)
+            reward += compute_visual_reward(observation)
             accum_reward += reward
             if step % frame_skip == 0:
                 print(f"pos_t: {uav_pos_t[0]:.3f} {uav_pos_t[1]:.3f}"\
@@ -539,10 +552,14 @@ if __name__ == '__main__':
                       f" -> reward ({reward:.4f}) {accum_reward:.4f}"\
                       f" diff: {distance_diff:.4f} ({curr_distance:.4f}/{controller.get_risk_distance(goal_threshold/2.):.4f})")
                 accum_reward = 0
+            
+            if take_shot:
+                timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+                cv2.imwrite(f'photos/picture_{timestamp}.png', state['image'])
 
             state = next_state.copy()
             # capture action
-            action, run_flag = get_kb_action(kb)
+            action, run_flag, take_shot = get_kb_action(kb)
             disturbances = dict(disturbances=action)
             # perform action
             controller.send_data(disturbances)
