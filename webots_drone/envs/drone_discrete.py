@@ -54,23 +54,16 @@ class DroneEnvDiscrete(DroneEnvContinuous):
 
     @staticmethod
     def discrete2continuous(action):
-        control_limits = WebotsSimulation.get_control_ranges()
-        limits = np.hstack((control_limits[1, :3],
-                            control_limits[0, :3][::-1]))
-        n_total = limits.shape[-1] + 1
-
         if action == 0:  # no action
             return WebotsSimulation.get_control_ranges()[1] * 0.
         else:
-            action -= 1  # reduce the no action
-        # Discrete to Box without no action
-        encoded = get_one_hot([action], n_total - 1)
-        encoded = limits * encoded[0]
-        # roll, pitch, yaw and altitud
-        decoded = encoded.reshape((2, n_total // 2))[::-1]  # l, h
-        decoded[0] = decoded[0][::-1]  # back order
-        decoded = np.hstack((decoded.sum(axis=0), [0]))  # append altitude
-        return decoded
+            limits = WebotsSimulation.get_control_ranges()[:, :3]
+            mask = np.eye(limits.shape[-1])
+            action_map = [limits[a % 2 - 1] * mask[a // 2]
+                          for a in range(np.multiply(*limits.shape))]
+            # get action and append altitude
+            decoded = np.hstack((action_map[action - 1], [0]))
+            return decoded
 
     def step(self, action):
         """Do an action step inside the Webots simulator."""

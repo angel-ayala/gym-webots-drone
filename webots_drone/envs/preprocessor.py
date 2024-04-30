@@ -13,6 +13,8 @@ from gym import spaces
 
 from webots_drone.utils import min_max_norm
 from webots_drone.utils import flight_area_norm_position
+from webots_drone.utils import compute_orientation
+from webots_drone.utils import compute_distance
 from webots_drone.stack import ObservationStack
 
 
@@ -125,7 +127,7 @@ def normalize_vector(vector, xyz_range, xyz_vel):
     norm_vector = vector.copy()
     norm_vector[:6] = normalize_angles(norm_vector[:6])
     norm_vector[6:12] = normalize_position(norm_vector[6:12], *xyz_range, *xyz_vel)
-    norm_vector[13] /= np.pi
+    norm_vector[12] /= np.pi
     return norm_vector
 
 
@@ -141,125 +143,109 @@ def crop_from_center(img):
     return result
 
 
-def append_target(obs, info, flight_area, add_dim=True):
+def info2target_position(info, flight_area):
     target_pos = info['target_position']
-    target_pos[-1] = max(flight_area[0, -1], target_pos[-1])
-    delta_pos = np.subtract(info['position'], target_pos)
-    delta_pos = flight_area_norm_position(delta_pos, flight_area)
-    if add_dim:
-        target_dim = np.array(info['target_dim']) / 10.
-        return np.hstack((obs, delta_pos, target_dim))
-    else:
-        return np.hstack((obs, delta_pos))
+    target_pos[-1] = max(target_pos[-1], flight_area[0][-1])
+    target_pos_norm = flight_area_norm_position(target_pos, flight_area)
+    return target_pos_norm
 
 
-class MultiModalObservation(gym.Wrapper):
-    def __init__(self, env: gym.Env, shape1=(3, 84, 84), shape2=(22, ),
-                 frame_stack=1, add_target=False):
+def info2target_distance(info, flight_area):
+    # distance
+    uav_pos = info['position']
+    target_pos = info['target_position']
+    if target_pos[-1] < flight_area[0][-1]:
+        target_pos[-1] = uav_pos[-1]
+    target_dist = compute_distance(uav_pos, target_pos)
+    # orientation
+    target_ori = compute_orientation(uav_pos[:2], target_pos[:2])
+    ori_diff_norm = np.cos(target_ori - info['north_rad'])
+    return target_dist, ori_diff_norm
+
+
+def info2target_dim(info):
+    target_dim = np.array(info['target_dim'])  # / 10.
+    return target_dim.tolist()
+
+
+class CustomVectorObservation(gym.Wrapper):
+    def __init__(self, env: gym.Env, uav_data=['imu', 'gyro', 'gps', 'gps_vel',
+                                               'north', 'dist_sensors'],
+                 target_dist=False, target_pos=False, target_dim=False,
+                 add_action=False):
         super().__init__(env)
-        self.rgb_obs = spaces.Box(low=0, high=1, shape=shape1,
-                                  dtype=np.float32)
-        self.vector_obs = spaces.Box(low=float('-inf'), high=float('inf'),
-                                     shape=shape2, dtype=np.float32)
-        self.frame_stack = frame_stack
-        self.add_target = add_target
-        if add_target:
-            obs_shape = np.asarray(shape2) + 5
-            self.vector_obs = spaces.Box(low=float('-inf'), high=float('inf'),
-                                         shape=obs_shape, dtype=np.float32)
+        obs_elems = 0
+        self.uav_data = uav_data
+        for d in uav_data:
+            if d in ['imu', 'gyro', 'gps', 'gps_vel']:
+                obs_elems += 3
+            if d == 'north':
+                obs_elems += 1
+            if d == 'dist_sensors':
+                obs_elems += 9
 
-        if frame_stack > 1:
-            env.observation_space = self.rgb_obs
-            self.env_rgb = ObservationStack(env, k=frame_stack)
-            self.rgb_obs = self.env_rgb.observation_space
-            env.observation_space = self.vector_obs
-            self.env_vector = ObservationStack(env, k=frame_stack)
-            self.vector_obs = self.env_vector.observation_space
+        self.target_dist = target_dist
+        obs_elems += 2 * int(target_dist)
+        self.target_pos = target_pos
+        obs_elems += 3 * int(target_pos)
+        self.target_dim = target_dim
+        obs_elems += 2 * int(target_dim)
+        self.add_action = add_action
 
-        self.observation_space = spaces.Tuple((self.rgb_obs, self.vector_obs))
+        if add_action:
+            self.action_vars = self.env.action_space.shape[-1] \
+                if len(self.env.action_space.shape) > 0 else 1
+            obs_elems += self.action_vars
 
-    def add_1d_target(self, obs, info):
-        return append_target(obs, info, self.env.flight_area)
-
-    def get_state(self):
-        """Process the environment to get a state."""
-        state_data = self.env.sim.get_data()
-        # order sensors by dimension and split
-        state_2d = self.env.get_observation_2d(state_data)
-        state_1d = self.env.get_observation_1d(state_data, norm=True)
-        if self.add_target:
-            state_1d = self.add_1d_target(state_1d, state_data)
-        return state_2d, state_1d
-
-    def step(self, action):
-        _, rews, terminateds, truncateds, info = self.env.step(action)
-        new_obs = self.get_state()
-        if self.frame_stack > 1:
-            self.env_rgb.frames.append(new_obs[0])
-            self.env_vector.frames.append(new_obs[1][np.newaxis, ...])
-            new_obs = (self.env_rgb.observation(None),
-                       self.env_vector.observation(None))
-
-        return new_obs, rews, terminateds, truncateds, info
-
-    def reset(self, **kwargs):
-        """Resets the environment and normalizes the observation."""
-        _, info = self.env.reset(**kwargs)
-        new_obs = self.get_state()
-        if self.frame_stack > 1:
-            for _ in range(self.frame_stack):
-                self.env_rgb.frames.append(new_obs[0])
-                self.env_vector.frames.append(new_obs[1][np.newaxis, ...])
-            new_obs = (self.env_rgb.observation(None),
-                       self.env_vector.observation(None))
-
-        return new_obs, info
-
-
-class TargetVectorObservation(gym.Wrapper):
-    def __init__(self, env: gym.Env):
-        super().__init__(env)
         obs_shape = np.asarray(self.env.observation_space.shape)
-        obs_shape[-1] += 5
-        self.observation_space = spaces.Box(low=float('-inf'), high=float('inf'),
+        obs_shape[-1] = obs_elems
+        self.observation_space = spaces.Box(low=float('-inf'),
+                                            high=float('inf'),
                                             shape=obs_shape, dtype=np.float32)
 
-    def add_1d_target(self, obs, info):
-        return append_target(obs, info, self.env.flight_area)
+    def observation(self, obs, info, action):
+        new_obs = list()
+        if 'imu' in self.uav_data:
+            new_obs.extend(obs[:3])
+        if 'gyro' in self.uav_data:
+            new_obs.extend(obs[3:6])
+        if 'gps' in self.uav_data:
+            new_obs.extend(obs[6:9])
+        if 'gps_vel' in self.uav_data:
+            new_obs.extend(obs[9:12])
+        if 'north' in self.uav_data:
+            new_obs.append(obs[12])
+
+        if self.target_dist:
+            new_obs.extend(info2target_distance(info, self.env.flight_area))
+        if self.target_pos:
+            new_obs.extend(info2target_position(info, self.env.flight_area))
+        if self.target_dim:
+            new_obs.extend(info2target_dim(info))
+        # append action v_t-1
+        if self.add_action:
+            if len(self.env.action_space.shape) > 0:
+                action_max = self.env.action_limits[1][:self.action_vars]
+                new_obs.extend(action / action_max)
+            else:
+                new_obs.append(action)
+        # append sensors at the end
+        if 'dist_sensors' in self.uav_data:
+            new_obs.extend(obs[13:])
+        # print('new_obs', len(new_obs), new_obs)
+        return np.array(new_obs)
 
     def step(self, action):
         obs, rews, terminateds, truncateds, info = self.env.step(action)
         # adding target vector, expecting info2obs_1d
-        new_obs = self.add_1d_target(obs, info)
+        new_obs = self.observation(obs, info, action)
         return new_obs, rews, terminateds, truncateds, info
 
     def reset(self, **kwargs):
         """Resets the environment and normalizes the observation."""
         obs, info = self.env.reset(**kwargs)
-        new_obs = self.add_1d_target(obs, info)
+        new_obs = self.observation(obs, info, np.zeros(self.action_space.shape))
         return new_obs, info
-
-
-class ReducedVectorObservation(gym.Wrapper):
-    def __init__(self, env: gym.Env):
-        super().__init__(env)
-        self.obs_shape = (13, )
-        self.obs_type = np.float32
-        self.observation_space = gym.spaces.Box(
-            low=float('-inf'), high=float('inf'),
-            shape=self.obs_shape, dtype=self.obs_type)
-
-    def observation(self, obs):
-        return obs[:13]
-
-    def step(self, action):
-        obs, rews, terminateds, truncateds, infos = self.env.step(action)
-        return self.observation(obs), rews, terminateds, truncateds, infos
-
-    def reset(self, **kwargs):
-        obs, info = self.env.reset(**kwargs)
-
-        return self.observation(obs), info
 
 
 class ReducedActionSpace(gym.Wrapper):
@@ -276,3 +262,74 @@ class ReducedActionSpace(gym.Wrapper):
         mapped_action = np.clip(mapped_action, *self.env.action_limits)
 
         return self.env.step(mapped_action)
+
+
+class MultiModalObservation(gym.Wrapper):
+    # FIXME
+    def __init__(self, env: gym.Env, shape1=(3, 84, 84), shape2=(22, ),
+                 frame_stack=1, add_target=False, with_target_dim=False):
+        super().__init__(env)
+        self.rgb_obs = spaces.Box(low=0, high=1, shape=shape1,
+                                  dtype=np.float32)
+        self.vector_obs = spaces.Box(low=float('-inf'), high=float('inf'),
+                                     shape=shape2, dtype=np.float32)
+        self.frame_stack = frame_stack
+        self.add_target = add_target
+        self.with_target_dim = with_target_dim
+        if add_target:
+            obs_shape = np.asarray(shape2) + 3
+            if with_target_dim:
+                obs_shape += 2
+            obs_shape += self.env.action_space.shape[-1] if len(self.env.action_space.shape) > 0 else 1
+            self.vector_obs = spaces.Box(low=float('-inf'), high=float('inf'),
+                                         shape=obs_shape, dtype=np.float32)
+
+        if frame_stack > 1:
+            env.observation_space = self.rgb_obs
+            self.env_rgb = ObservationStack(env, k=frame_stack)
+            self.rgb_obs = self.env_rgb.observation_space
+            env.observation_space = self.vector_obs
+            self.env_vector = ObservationStack(env, k=frame_stack)
+            self.vector_obs = self.env_vector.observation_space
+
+        self.observation_space = spaces.Tuple((self.rgb_obs, self.vector_obs))
+
+    def add_1d_target(self, obs, info):
+        return append_target_position(obs, info, self.env.flight_area)
+
+    def get_state(self):
+        """Process the environment to get a state."""
+        state_data = self.env.sim.get_data()
+        # order sensors by dimension and split
+        state_2d = self.env.get_observation_2d(state_data)
+        state_1d = self.env.get_observation_1d(state_data, norm=True)
+        if self.add_target:
+            state_1d = self.add_1d_target(state_1d, state_data)
+        return state_2d, state_1d
+
+    def step(self, action):
+        _, rews, terminateds, truncateds, info = self.env.step(action)
+        new_obs = self.get_state()
+        
+        if self.frame_stack > 1:
+            self.env_rgb.frames.append(new_obs[0])
+            self.env_vector.frames.append(new_obs[1][np.newaxis, ...])
+            new_obs = (self.env_rgb.observation(None),
+                       self.env_vector.observation(None))
+
+        return new_obs, rews, terminateds, truncateds, info
+
+    def reset(self, **kwargs):
+        """Resets the environment and normalizes the observation."""
+        _, info = self.env.reset(**kwargs)
+        new_obs = self.get_state()
+        # append action v_t-1
+        new_obs[1] = append_action(new_obs[1], np.zeros_like(self.env.action_space.shape))
+        if self.frame_stack > 1:
+            for _ in range(self.frame_stack):
+                self.env_rgb.frames.append(new_obs[0])
+                self.env_vector.frames.append(new_obs[1][np.newaxis, ...])
+            new_obs = (self.env_rgb.observation(None),
+                       self.env_vector.observation(None))
+
+        return new_obs, info

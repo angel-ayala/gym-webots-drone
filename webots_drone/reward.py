@@ -127,7 +127,7 @@ def sum_rewards(distance_rewards, orientation_rewards):
     return r_sum
 
 
-def compute_position2target_reward(ref_position, pos_t, pos_t1, orientation_t1,
+def compute_position2target_reward(ref_position, pos_t, pos_t1, orientation_t, orientation_t1,
                                    distance_threshold=36., distance_offset=5.,
                                    orientation_offset=0.015, n_segments=3):
     # compute orientation reward

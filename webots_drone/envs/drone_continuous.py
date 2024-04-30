@@ -147,17 +147,12 @@ class DroneEnvContinuous(gym.Env):
         return state_2d
     
     def get_observation_1d(self, state_data, norm=False):
-        state_1d_t1 = info2obs_1d(state_data)
-        if len(self.last_info.keys()) == 0:
-            return np.zeros_like(state_1d_t1)
-        state_1d_t = info2obs_1d(self.last_info)
-        diff_state = state_1d_t1 - state_1d_t
+        state_1d = info2obs_1d(state_data)
         if norm:
-            xyz_ranges = np.ones((3, 2))
-            xyz_ranges[:, 0] *= -1
+            xyz_ranges = list(zip(*self.flight_area))
             xyz_velocities = [4., 4., 1.]
-            diff_state = normalize_vector(diff_state, xyz_ranges, xyz_velocities)
-        return diff_state
+            state_1d = normalize_vector(state_1d, xyz_ranges, xyz_velocities)
+        return state_1d
 
     def get_state(self):
         """Process the environment to get a state."""
@@ -166,7 +161,7 @@ class DroneEnvContinuous(gym.Env):
         if self.is_pixels:
             state = self.get_observation_2d(state_data)
         else:
-            state = self.get_observation_1d(state_data, norm=True)
+            state = self.get_observation_1d(state_data)
 
         return state, state_data
 
@@ -253,16 +248,18 @@ class DroneEnvContinuous(gym.Env):
 
         # 2 dimension considered
         if len(self.last_info.keys()) == 0:
-            uav_pos_t = info['position'][:2]  # pos_t+1
+            uav_pos_t = info['position'][:2]  # pos_t
+            uav_ori_t = info['north_rad']  # orientation_t
         else:
             uav_pos_t = self.last_info['position'][:2]  # pos_t
+            uav_ori_t = self.last_info['north_rad']  # orientation_t
         uav_pos_t1 = info['position'][:2]  # pos_t+1
         uav_ori_t1 = info['north_rad']  # orientation_t+1
         target_xy = self.sim.get_target_pos()[:2]
 
         # compute reward components
         reward = compute_position2target_reward(
-            target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
+            target_xy, uav_pos_t, uav_pos_t1, uav_ori_t, uav_ori_t1,
             distance_threshold=self.compute_risk_dist(self._goal_threshold),
             distance_offset=self._goal_threshold)
 
@@ -288,16 +285,12 @@ class DroneEnvContinuous(gym.Env):
         return self._episode_steps >= self._max_episode_steps
 
     def perform_action(self, action):
-        self.last_state, self.last_info = self.get_state()
+        # perform constrained action
         constrained_action = self.sim.clip_action(action, self.flight_area)
-        # perform action
         command = dict(disturbances=constrained_action)
         self.sim.send_data(command)
-        # read state
-        observation, info = self.get_state()
-        # compute reward
-        reward = self.compute_reward(observation, info)  # obtain reward
-        return observation, reward, info
+        # read new state
+        return self.get_state()
 
     def lift_uav(self, altitude):
         diff_altitude = float('inf')
@@ -305,7 +298,7 @@ class DroneEnvContinuous(gym.Env):
         logger.info("Lifting the drone...")
         # wait for lift momentum
         while diff_altitude > 13.:
-            _, _, info = self.perform_action(lift_action)
+            _, info = self.perform_action(lift_action)
             diff_altitude = altitude - info['position'][2]  # Z axis diff
         # change vertical position
         tpos = info['position']
@@ -313,7 +306,7 @@ class DroneEnvContinuous(gym.Env):
         self.sim.drone_node['set_pos'](tpos)
         # wait for altitude
         while diff_altitude > 0:
-            _, _, info = self.perform_action(lift_action)
+            _, info = self.perform_action(lift_action)
             diff_altitude = altitude - info['position'][2]  # Z axis diff
         logger.info("Drone lifted")
 
@@ -332,7 +325,7 @@ class DroneEnvContinuous(gym.Env):
         self.sim.sync()
         self.lift_uav(self.init_altitude)
         self.init_runtime_vars()
-        # self.last_state, self.last_info = self.get_state()
+        self.last_state, self.last_info = self.get_state()
 
         return self.get_state()
 
@@ -344,10 +337,12 @@ class DroneEnvContinuous(gym.Env):
                                                high=self._frame_inter[1],
                                                endpoint=True)
         for i in range(react_frames):
-            observation, obs_reward, info = self.perform_action(action)
-            reward += obs_reward  # step reward
+            observation, info = self.perform_action(action)
             if self._end:
                 break
+
+        # compute reward
+        reward = self.compute_reward(observation, info)  # obtain reward
 
         # timeout limit
         if self.__time_limit():
@@ -358,7 +353,7 @@ class DroneEnvContinuous(gym.Env):
         # normalize step reward
         # reward = self.norm_reward(reward)
 
-        # self.last_state, self.last_info = observation, info
+        self.last_state, self.last_info = observation, info
 
         return observation, reward, self._end, False, info
 
