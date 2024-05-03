@@ -13,7 +13,7 @@ from gym import spaces
 
 from webots_drone.utils import min_max_norm
 from webots_drone.utils import flight_area_norm_position
-from webots_drone.utils import compute_orientation
+from webots_drone.utils import compute_target_orientation
 from webots_drone.utils import compute_distance
 from webots_drone.stack import ObservationStack
 
@@ -158,7 +158,7 @@ def info2target_distance(info, flight_area):
         target_pos[-1] = uav_pos[-1]
     target_dist = compute_distance(uav_pos, target_pos)
     # orientation
-    target_ori = compute_orientation(uav_pos[:2], target_pos[:2])
+    target_ori = compute_target_orientation(uav_pos[:2], target_pos[:2])
     ori_diff_norm = np.cos(target_ori - info['north_rad'])
     return target_dist, ori_diff_norm
 
