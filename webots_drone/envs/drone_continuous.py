@@ -18,7 +18,7 @@ from webots_drone.utils import check_collision
 from webots_drone.utils import check_flipped
 from webots_drone.utils import check_near_object
 from webots_drone.utils import min_max_norm
-from webots_drone.reward import compute_position2target_reward
+from webots_drone.reward import compute_vector_reward
 from webots_drone.reward import compute_visual_reward
 
 from .preprocessor import seconds2steps
@@ -253,17 +253,15 @@ class DroneEnvContinuous(gym.Env):
         # 2 dimension considered
         if len(self.last_info.keys()) == 0:
             uav_pos_t = info['position'][:2]  # pos_t
-            uav_ori_t = info['north_rad']  # orientation_t
         else:
             uav_pos_t = self.last_info['position'][:2]  # pos_t
-            uav_ori_t = self.last_info['north_rad']  # orientation_t
         uav_pos_t1 = info['position'][:2]  # pos_t+1
         uav_ori_t1 = info['north_rad']  # orientation_t+1
         target_xy = self.sim.get_target_pos()[:2]
 
         # compute reward components
-        reward = compute_position2target_reward(
-            target_xy, uav_pos_t, uav_pos_t1, uav_ori_t, uav_ori_t1,
+        reward = compute_vector_reward(
+            target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
             distance_target=self.distance_target,
             distance_margin=self._goal_threshold)
 
@@ -331,7 +329,7 @@ class DroneEnvContinuous(gym.Env):
         self.init_runtime_vars()
         self.last_state, self.last_info = self.get_state()
 
-        return self.get_state()
+        return self.last_state, self.last_info
 
     def step(self, action):
         """Perform an action step in the simulation scene."""

@@ -356,7 +356,7 @@ class WebotsSimulation(Supervisor):
         north_rad = info["north_rad"]
         out_area = check_flight_area(info["position"], flight_area)
 
-        is_north = np.pi / 2 > north_rad > -np.pi / 2  # north
+        is_north = np.pi / 2. > north_rad > -np.pi / 2.  # north
         is_east = north_rad < 0
         orientation = [is_north,        # north
                        not is_north,    # south
@@ -413,13 +413,10 @@ class WebotsSimulation(Supervisor):
 if __name__ == '__main__':
     import cv2
     import datetime
-    from envs.preprocessor import info2obs_1d
-    from envs.preprocessor import info2image
-    from webots_drone.reward import compute_position2target_reward
-    from webots_drone.reward import compute_visual_reward
-    from webots_drone.utils import target_mask
-    from webots_drone.utils import compute_orientation
-    from webots_drone.utils import orientation_correction
+    from webots_drone.reward import compute_vector_reward
+    # from webots_drone.utils import compute_target_orientation
+    # from webots_drone.envs.preprocessor import info2image
+    # from webots_drone.reward import compute_visual_reward
 
     def print_control_keys():
         """Display manual control message."""
@@ -531,33 +528,31 @@ if __name__ == '__main__':
         while (run_flag):  # and drone.getTime() < 30):
             # 2 dimension considered
             uav_pos_t = state['position'][:2]  # pos_t
-            uav_ori_t = state['north_rad']
             uav_pos_t1 = next_state['position'][:2]  # pos_t+1
             uav_ori_t1 = next_state['north_rad']
             target_xy = controller.get_target_pos()[:2]
-            target_ori = compute_orientation(uav_pos_t1, target_xy)
-            target_ori = orientation_correction(target_ori)
+            # target_ori = compute_target_orientation(uav_pos_t1, target_xy)
 
             # compute reward components
             curr_distance = compute_distance(target_xy, uav_pos_t)
             next_distance = compute_distance(target_xy, uav_pos_t1)
             distance_diff = np.round(curr_distance - next_distance, 3)
             distance_diff *= np.abs(distance_diff) > 0.003
-            reward = compute_position2target_reward(
-                target_xy, uav_pos_t, uav_pos_t1, uav_ori_t, uav_ori_t1,
+            reward = compute_vector_reward(
+                target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
                 distance_target=controller.get_risk_distance(goal_threshold / 2.),
                 distance_margin=goal_threshold)
-            
+
             # observation = info2image(next_state, output_size=84)
             # reward += compute_visual_reward(observation)
             accum_reward += reward
             if step % frame_skip == 0:
                 print(f"pos_t: {uav_pos_t[0]:.3f} {uav_pos_t[1]:.3f}"\
-                  f" - post_t+1: {uav_pos_t1[0]:.3f} {uav_pos_t1[1]:.3f} (N:{uav_ori_t1:.3f})"\
+                      f" - post_t+1: {uav_pos_t1[0]:.3f} {uav_pos_t1[1]:.3f} (N:{uav_ori_t1:.3f})"\
                       f" -> reward ({reward:.4f}) {accum_reward:.4f}"\
                       f" diff: {distance_diff:.4f} ({curr_distance:.4f}/{controller.get_risk_distance(goal_threshold/2.):.4f})")
                 accum_reward = 0
-            
+
             if take_shot:
                 timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
                 cv2.imwrite(f'photos/picture_{timestamp}.png', state['image'])

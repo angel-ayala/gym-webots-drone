@@ -22,28 +22,32 @@ def distance2reward(distance, ref_distance):
     return 1. - abs(1. - distance / ref_distance)
 
 
-def compute_position2target_reward(ref_position, pos_t, pos_t1, orientation_t1,
-                                   distance_target=36., distance_margin=5.):
+def compute_vector_reward(ref_position, pos_t, pos_t1, orientation_t1,
+                          distance_target=36., distance_margin=5.):
     # compute orientation reward
     ref_orientation = compute_target_orientation(pos_t1, ref_position)
     r_orientation = orientation2reward(orientation_t1, ref_orientation)
-    r_orientation = (r_orientation + 1.) / 2.
+    r_orientation = (r_orientation - 1.) / 2.
     # compute velocity reward
     dist_t = compute_distance(pos_t, ref_position)
     dist_t1 = compute_distance(pos_t1, ref_position)
-    r_velocity = (dist_t - dist_t1) / 0.03
+    dist_diff = dist_t - dist_t1
+    dist_diff *= np.abs(dist_diff).round(3) > 0.003  # ensure minimum diff
+    r_velocity = (dist_diff) / 0.03
     # check zones
     zones = check_target_distance(dist_t1, distance_target,
                                   distance_margin / 2.)
     # inverse when trespass goal distance
     if zones[0]:
         r_velocity *= -1
+    # force velocity != 0
+    r_velocity -= 0.1
     # compose reward
-    r_sum = r_velocity * r_orientation - 1
+    r_sum = r_velocity + r_orientation
 
     # bonus in-distance
     if zones[1]:
-        r_sum += 2
+        r_sum += 2.1
 
     return r_sum
 
