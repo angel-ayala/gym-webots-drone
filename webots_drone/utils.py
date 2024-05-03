@@ -96,17 +96,18 @@ def decode_image(raw_image):
     array_image = cv2.imdecode(buffer_img, cv2.IMREAD_UNCHANGED)
     return array_image
 
+
 def check_flight_area(uav_pos, flight_area):
-    """Check if the uav_pos is outside the flight_area."""
+    """Check if the uav_pos is outside the flight_area for ENU system."""
     # X axis check
-    north = uav_pos[0] > flight_area[1][0]
-    south = uav_pos[0] < flight_area[0][0]
+    east = uav_pos[0] > flight_area[1][0]
+    west = uav_pos[0] < flight_area[0][0]
     # Y axis check
-    east = uav_pos[1] < flight_area[0][1]
-    west = uav_pos[1] > flight_area[1][1]
-    # Z axis check (altitude)
-    down = uav_pos[2] < flight_area[0][2]
+    north = uav_pos[1] > flight_area[1][1]
+    south = uav_pos[1] < flight_area[0][1]
+    # Z axis check
     up = uav_pos[2] > flight_area[1][2]
+    down = uav_pos[2] < flight_area[0][2]
     return [north, south, east, west, up, down]
 
 
@@ -193,8 +194,8 @@ def target_mask(observation):
 
     # join my masks
     mask = mask0 + mask1
-    
-    # info 
+
+    # info
     contours, hierarchy = cv2.findContours(mask, 1, 2)
     area = -1
     cpoint = None
@@ -204,5 +205,28 @@ def target_mask(observation):
             M = cv2.moments(cnt)
             cpoint = (int(M['m10']/M['m00']), int(M['m01']/M['m00']))
             break
-    
+
     return mask, area, cpoint
+
+
+def orientation_correction(angle):
+    """Apply UAV sensor offset."""
+    angle -= np.pi / 2.
+    if angle < -np.pi:
+        angle += 2 * np.pi
+    return angle
+
+
+def compute_target_orientation(position, ref_position):
+    angle = compute_orientation(position, ref_position)
+    angle = orientation_correction(angle)
+    return angle
+
+
+def check_target_distance(distance, distance_target, distance_margin=5.):
+    area_limits = (distance_target - distance_margin,
+                   distance_target + distance_margin)
+    in_risk = distance < area_limits[0]
+    in_zone = area_limits[0] <= distance < area_limits[1]
+    out_zone = area_limits[1] <= distance
+    return in_risk, in_zone, out_zone

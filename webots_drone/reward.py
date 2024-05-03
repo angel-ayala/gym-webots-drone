@@ -8,148 +8,41 @@ Created on Wed Nov 22 11:35:08 2023
 
 import numpy as np
 from webots_drone.utils import compute_distance
-from webots_drone.utils import compute_orientation
+from webots_drone.utils import compute_target_orientation
+from webots_drone.utils import check_target_distance
 from webots_drone.utils import min_max_norm
 from webots_drone.utils import target_mask
 
 
-def compute_direction_vector(ref_position, position, orientation):
-    # Calculate the vector pointing from the agent's position to the target position
-    vector_to_target = np.array(ref_position) - np.array(position)
-
-    # Normalize the vector
-    norm_vector_to_target = vector_to_target / np.linalg.norm(vector_to_target)
-
-    # Calculate the agent's forward vector based on its orientation
-    agent_forward_vector = np.array([np.cos(orientation),
-                                     np.sin(orientation)])
-
-    return norm_vector_to_target, agent_forward_vector
+def orientation2reward(orientation, ref_orientation):
+    return np.cos(ref_orientation - orientation)
 
 
-def compute_orientation_reward(ref_position, position, orientation):
-    # Get direction vectors
-    direction_to_target, agent_forward = compute_direction_vector(
-        ref_position, position, orientation)
-
-    # Calculate cosine similarity between the direction to the target and agent's forward direction
-    cosine_similarity = np.dot(direction_to_target, agent_forward)
-
-    return cosine_similarity
+def distance2reward(distance, ref_distance):
+    return 1. - abs(1. - distance / ref_distance)
 
 
-def compute_target_orientation_reward(ref_position, position, orientation,
-                                      threshold_offset=0.025, n_segments=5):
-    curr_distance = compute_orientation_reward(ref_position, position,
-                                               orientation)
-    r_distance = np.copy(curr_distance)
-    # r_distance = add_scales(r_distance, curr_distance, 1,
-    #                         thr_offset=-threshold_offset, n_segments=n_segments,
-    #                         direction=1)
-
-    # if curr_distance >= 1 - threshold_offset:
-    #     r_distance *= 2.
-    # if curr_distance <= 1 - threshold_offset:
-    #     r_distance = -1.
-    return r_distance
-
-
-def apply_fn_list(array, fn):
-    orig_shape = array.shape
-    new_array = np.array(list(map(fn, array.flatten())))
-    new_array = np.reshape(new_array, orig_shape)
-    return new_array
-
-
-def compute_velocity_reward(velocity, pos_thr=0.003):
-    # benefits distance reduction
-    velocity_abs = np.abs(velocity)
-    # ensure position difference
-    velocity = np.round(velocity, 3)
-    velocity *= velocity_abs > pos_thr
-    if velocity == 0.:
-        # if no move
-        return -1.
-    if velocity > 0.:
-        # if move oppposite to target's direction
-        return velocity_abs * -10.
-    if velocity < 0.:
-        # if move to target's direction
-        return velocity_abs * 100.
-
-
-def compare_direction(x, y, direction):
-    if direction == 1:
-        return x >= y
-    if direction == 0:
-        return x < y
-
-def add_scales(reward, distance, central_point, thr_offset, n_segments=5,
-               thr_factor=1.5, direction=0):
-    scaled_reward = np.copy(reward)
-    compare = lambda x, y: compare_direction(x, y, direction)
-    if isinstance(distance, (list, np.ndarray)):
-        scaled_reward[compare(distance, central_point)] *= 0.5
-    elif compare(distance, central_point):
-        scaled_reward *= 0.5
-
-    for n in range(n_segments):
-        if isinstance(distance, (list, np.ndarray)):
-            scaled_reward[compare(distance, central_point + thr_offset * n * thr_factor)] *= 2.
-        elif compare(distance, central_point + thr_offset * n * thr_factor):
-            scaled_reward *= 2.
-
-    # normalize
-    scaled_reward /= 2**n_segments
-    return scaled_reward
-
-
-def compute_distance_reward(distance, d_central=None, distance_threshold=25.,
-                            threshold_offset=5., n_segments=5):
-    if d_central is None:
-        d_central = distance_threshold - threshold_offset / 2.
-    curr_distance = distance
-    r_distance = 1. - abs(1. - curr_distance / d_central)
-    # r_distance = add_scales(r_distance, curr_distance, d_central,
-    #                         thr_offset=threshold_offset, n_segments=n_segments)
-    # if distance_threshold - threshold_offset < curr_distance < distance_threshold:
-    #     r_distance *= 2.
-    # if curr_distance < distance_threshold:
-        # r_distance -= threshold_offset / 2.
-    # if distance_threshold * 2.5 < curr_distance:
-    #     r_distance = -1.
-    # return (max(-2, r_distance) + 2.) / 3.
-    return r_distance
-
-
-def sum_rewards(distance_rewards, orientation_rewards):
-    r_sum = distance_rewards * 0.3 + orientation_rewards
-    return r_sum
-
-
-def compute_position2target_reward(ref_position, pos_t, pos_t1, orientation_t, orientation_t1,
-                                   distance_threshold=36., distance_offset=5.,
-                                   orientation_offset=0.015, n_segments=3):
+def compute_position2target_reward(ref_position, pos_t, pos_t1, orientation_t1,
+                                   distance_target=36., distance_margin=5.):
     # compute orientation reward
-    r_orientation = compute_target_orientation_reward(
-        ref_position, pos_t1, orientation_t1,
-        threshold_offset=orientation_offset, n_segments=n_segments)
-    # compute distance reward
-    dist_t1 = compute_distance(ref_position, pos_t1)
-    d_central = distance_threshold - distance_offset / 2.
-    r_distance = compute_distance_reward(
-        dist_t1, d_central, distance_threshold=distance_threshold,
-        threshold_offset=distance_offset, n_segments=n_segments)
-    # normalize and sum
-    r_sum = sum_rewards(r_distance, r_orientation)
-    # compute distance momentum factor
-    dist_tc = compute_distance(ref_position, pos_t) - d_central
-    dist_t1c = dist_t1 - d_central
-    r_vel = compute_velocity_reward(dist_t1c - dist_tc)
-    r_sum += r_vel
+    ref_orientation = compute_target_orientation(pos_t1, ref_position)
+    r_orientation = orientation2reward(orientation_t1, ref_orientation)
+    r_orientation = (r_orientation + 1.) / 2.
+    # compute velocity reward
+    dist_t = compute_distance(pos_t, ref_position)
+    dist_t1 = compute_distance(pos_t1, ref_position)
+    r_velocity = (dist_t - dist_t1) / 0.03
+    # check zones
+    zones = check_target_distance(dist_t1, distance_target,
+                                  distance_margin / 2.)
+    # inverse when trespass goal distance
+    if zones[0]:
+        r_velocity *= -1
+    # compose reward
+    r_sum = r_velocity * r_orientation - 1
 
     # bonus in-distance
-    if distance_threshold - distance_offset < dist_t1 < distance_threshold:
+    if zones[1]:
         r_sum += 2
 
     return r_sum
@@ -165,9 +58,8 @@ def compute_visual_reward(observation):
         offset_x = abs(tcenter[0] - obs_shape[0] // 2)
         offset_y = abs(tcenter[1] - obs_shape[1] // 2)
         reward = tarea - (offset_x + offset_y)
-        reward /= 800  # empirical desired area 
+        reward /= 800  # empirical desired area
     return reward
-    
 
 
 if __name__ == '__main__':
@@ -185,14 +77,14 @@ if __name__ == '__main__':
 
         for i, x in enumerate(x_values):
             for j, y in enumerate(y_values):
+                position = [x, y]
                 # Calculate distance reward
-                pos_distance = compute_distance(ref_position, [x, y])
-                distance_grid[i, j, 0] = pos_distance
-                distance_grid[i, j, 1] = compute_distance_reward(
-                    pos_distance, distance_threshold=36.5, threshold_offset=5.)
+                distance = compute_distance(position, ref_position)
+                distance_grid[i, j, 0] = distance
+                distance_grid[i, j, 1] = distance2reward(distance, ref_distance=36.5)
                 # Calculate orientation reward
-                orientation_grid[i, j] = compute_target_orientation_reward(
-                    ref_position, [x, y], ref_orientation)
+                orientation = compute_target_orientation(position, ref_position)
+                orientation_grid[i, j] = orientation2reward(orientation, ref_orientation)
 
         return x_grid, y_grid, orientation_grid, distance_grid
 
@@ -235,18 +127,23 @@ if __name__ == '__main__':
         plt.grid()
         plt.show()
 
+    def apply_fn_list(array, fn):
+        orig_shape = array.shape
+        new_array = np.array(list(map(fn, array.flatten())))
+        new_array = np.reshape(new_array, orig_shape)
+        return new_array
+
     # Define the range of positions and orientations
     agent_position_range = (-100, 100)  # Example range for x and y coordinates
     plot_all = True
-    distance_threshold = 36.5
-    threshold_offset = 5
-    d_central = distance_threshold - threshold_offset / 2
-    better_pos_limits = (distance_threshold - threshold_offset,
-                         distance_threshold)
+    distance_target = 36.5
+    distance_margin = 5
+    d_central = distance_target - distance_margin / 2
 
     # Define the target position
-    target_position = [-50, 50]  # Example target position
-    target_orientation = compute_orientation([0, 0], target_position)
+    target_position = [-50, 50]
+    initial_position = [0, 0]
+    target_orientation = compute_target_orientation(initial_position, target_position)
 
     # Calculate the reward grid
     x_grid, y_grid, orientation_grid, distance_grid = \
@@ -254,9 +151,9 @@ if __name__ == '__main__':
 
     r_orientation = orientation_grid
     p_distance = distance_grid[:, :, 0]
-    p_distance2 = -(p_distance - d_central)/ d_central
+    p_distance2 = -(p_distance - d_central) / d_central
     r_distance = distance_grid[:, :, 1]
-    r_dist_ori = sum_rewards(r_distance, r_orientation)
+    r_dist_ori = r_distance * (r_orientation + 1.) / 2. - 1.
 
     print('distance_rewards', r_distance.min(), r_distance.max())
     print('orientation_rewards', r_orientation.min(), r_orientation.max())
@@ -265,10 +162,9 @@ if __name__ == '__main__':
     # Plot the reward heatmap
     plot_reward_heatmap(x_grid, y_grid, p_distance2, 'Position distances, target centered')
     plot_reward_heatmap(x_grid, y_grid, r_distance, 'Distance rewards')
-    plot_reward_heatmap(x_grid, y_grid, r_orientation,
-                        f'Orientation {target_orientation:.4f} rad rewards')
-    plot_reward_heatmap(x_grid, y_grid, r_dist_ori,
-                        'Distance and orientation rewards')
+    plot_reward_heatmap(x_grid, y_grid, r_orientation, f'Orientation {target_orientation:.4f} rad rewards')
+    plot_reward_heatmap(x_grid, y_grid, r_dist_ori, 'Distance and orientation rewards')
+
     # Plot derivatives
     # distance
     # d_distance = calculate_distance_derivative(x_grid, y_grid, r_distance, ['up', 'left'])
@@ -283,17 +179,15 @@ if __name__ == '__main__':
     # target approximation
     # Going away (pos diff)
     d_pos_down = calculate_distance_derivative(x_grid, y_grid, p_distance2, ['up', 'left'], norm=False)
-    down_factor = apply_fn_list(d_pos_down, compute_velocity_reward)
-    # plot_reward_heatmap(x_grid, y_grid, down_factor, 'Velocity reward (oppposite to target)')
-    plot_reward_heatmap(x_grid, y_grid, r_dist_ori - down_factor, 'Distance and orientation - down_factor')
+    down_factor = d_pos_down * r_orientation - 1
+    plot_reward_heatmap(x_grid, y_grid, down_factor, 'Velocity reward (oppposite to target)')
+    # plot_reward_heatmap(x_grid, y_grid, r_dist_ori - down_factor, 'Distance and orientation - down_factor')
     # Aproaching (neg diff)
     d_pos_up = -d_pos_down
-    up_factor = apply_fn_list(d_pos_up, compute_velocity_reward)
-    # plot_reward_heatmap(x_grid, y_grid, up_factor, 'Velocity reward (towards target)')
-    plot_reward_heatmap(x_grid, y_grid, r_dist_ori + up_factor, 'Distance and orientation + up_factor')
+    up_factor = d_pos_up * r_orientation - 1
+    plot_reward_heatmap(x_grid, y_grid, up_factor, 'Velocity reward (towards target)')
+    # plot_reward_heatmap(x_grid, y_grid, r_dist_ori + up_factor, 'Distance and orientation + up_factor')
     # No diff
-    no_factor = apply_fn_list(np.zeros_like(p_distance2), compute_velocity_reward)
+    # no_factor = apply_fn_list(np.zeros_like(p_distance2), compute_velocity_reward)
     # plot_reward_heatmap(x_grid, y_grid, no_factor, 'No position difference')
-    plot_reward_heatmap(x_grid, y_grid, r_dist_ori + no_factor, 'Distance and orientation + no_factor')
-
-
+    # plot_reward_heatmap(x_grid, y_grid, r_dist_ori + no_factor, 'Distance and orientation + no_factor')

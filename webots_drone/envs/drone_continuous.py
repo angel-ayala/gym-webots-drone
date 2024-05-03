@@ -167,6 +167,10 @@ class DroneEnvContinuous(gym.Env):
 
     def compute_risk_dist(self, threshold=0.):
         return self.sim.get_risk_distance(threshold)
+    
+    @property
+    def distance_target(self):
+        return self.sim.get_risk_distance(self._goal_threshold / 2.)
 
     def __no_action_limit(self, position):
         if len(self.last_info.keys()) == 0:
@@ -260,8 +264,8 @@ class DroneEnvContinuous(gym.Env):
         # compute reward components
         reward = compute_position2target_reward(
             target_xy, uav_pos_t, uav_pos_t1, uav_ori_t, uav_ori_t1,
-            distance_threshold=self.compute_risk_dist(self._goal_threshold),
-            distance_offset=self._goal_threshold)
+            distance_target=self.distance_target,
+            distance_margin=self._goal_threshold)
 
         if self.is_pixels:
             reward += compute_visual_reward(obs)
