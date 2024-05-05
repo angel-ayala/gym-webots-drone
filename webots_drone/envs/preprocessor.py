@@ -175,32 +175,66 @@ class CustomVectorObservation(gym.Wrapper):
                  add_action=False):
         super().__init__(env)
         obs_elems = 0
+        obs_high_limits = []
+        obs_low_limits = []
         self.uav_data = uav_data
-        for d in uav_data:
-            if d in ['imu', 'gyro', 'gps', 'gps_vel']:
-                obs_elems += 3
-            if d == 'north':
-                obs_elems += 1
-            if d == 'dist_sensors':
-                obs_elems += 9
+        if 'imu' in uav_data:
+            obs_elems += 3
+            obs_high_limits.extend([np.pi, np.pi / 2., np.pi])
+            obs_low_limits.extend([-np.pi, -np.pi / 2., -np.pi])
+        if 'gyro' in uav_data:
+            obs_elems += 3
+            obs_high_limits.extend([np.pi, np.pi / 2., np.pi])
+            obs_low_limits.extend([-np.pi, -np.pi / 2., -np.pi])
+        if 'gps' in uav_data:
+            obs_elems += 3
+            obs_high_limits.extend(self.env.flight_area[1])
+            obs_low_limits.extend(self.env.flight_area[0])
+        if 'gps_vel' in uav_data:
+            obs_elems += 3
+            obs_high_limits.extend([4., 4., 1.])
+            obs_low_limits.extend([-4., -4., -1.])
+        if 'north' in uav_data:
+            obs_elems += 1
+            obs_high_limits.append(np.pi)
+            obs_low_limits.append(-np.pi)
+        if 'dist_sensors' in uav_data:
+            obs_elems += 9
+            obs_high_limits.extend([1. for _ in range(9)])
+            obs_low_limits.extend([0. for _ in range(9)])
 
         self.target_dist = target_dist
-        obs_elems += 2 * int(target_dist)
+        if target_dist:
+            obs_elems += 2 
+            obs_high_limits.extend([self.env.flight_area[1][0], 1.])
+            obs_low_limits.extend([0., -1.])
         self.target_pos = target_pos
-        obs_elems += 3 * int(target_pos)
+        if target_pos:
+            obs_elems += 3
+            obs_high_limits.extend(self.env.flight_area[1])
+            obs_low_limits.extend(self.env.flight_area[0])
         self.target_dim = target_dim
-        obs_elems += 2 * int(target_dim)
-        self.add_action = add_action
+        if target_dim:
+            obs_elems += 2
+            obs_high_limits.extend([10., 10.])
+            obs_low_limits.extend([0., 0.])
 
+        self.add_action = add_action
         if add_action:
-            self.action_vars = self.env.action_space.shape[-1] \
-                if len(self.env.action_space.shape) > 0 else 1
+            if len(self.env.action_space.shape) > 0:
+                self.action_vars = self.env.action_space.shape[-1]
+                obs_high_limits.extend(self.env.action_space.high)
+                obs_low_limits.extend(self.env.action_space.low)
+            else:
+                self.action_vars = 1
+                obs_high_limits.append(self.env.action_space.n)
+                obs_low_limits.append(0)
             obs_elems += self.action_vars
 
         obs_shape = np.asarray(self.env.observation_space.shape)
         obs_shape[-1] = obs_elems
-        self.observation_space = spaces.Box(low=float('-inf'),
-                                            high=float('inf'),
+        self.observation_space = spaces.Box(low=np.asarray(obs_low_limits),
+                                            high=np.asarray(obs_high_limits),
                                             shape=obs_shape, dtype=np.float32)
 
     def observation(self, obs, info, action):
@@ -302,7 +336,7 @@ class MultiModalObservation(gym.Wrapper):
         state_data = self.env.sim.get_data()
         # order sensors by dimension and split
         state_2d = self.env.get_observation_2d(state_data)
-        state_1d = self.env.get_observation_1d(state_data, norm=True)
+        state_1d = self.env.get_observation_1d(state_data)
         if self.add_target:
             state_1d = self.add_1d_target(state_1d, state_data)
         return state_2d, state_1d
