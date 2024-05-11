@@ -18,6 +18,7 @@ from webots_drone.utils import check_collision
 from webots_drone.utils import check_flipped
 from webots_drone.utils import check_near_object
 from webots_drone.utils import min_max_norm
+from webots_drone.utils import check_same_position
 from webots_drone.reward import compute_vector_reward
 from webots_drone.reward import compute_visual_reward
 
@@ -77,7 +78,7 @@ class DroneEnvContinuous(gym.Env):
         self.init_runtime_vars()
         self._max_episode_steps = seconds2steps(time_limit_seconds, frame_skip,
                                                 self.sim.timestep)
-        self._max_no_action_steps = seconds2steps(max_no_action_seconds, 1,
+        self._max_no_action_steps = seconds2steps(max_no_action_seconds, frame_skip,
                                                   self.sim.timestep)
         self._frame_skip = frame_skip
         self._frame_inter = [frame_skip - 5., frame_skip + 5.]
@@ -175,8 +176,7 @@ class DroneEnvContinuous(gym.Env):
     def __no_action_limit(self, position):
         if len(self.last_info.keys()) == 0:
             return False
-        diff_pos = compute_distance(position, self.last_info['position'])
-        if diff_pos <= 0.003:
+        if check_same_position(position, self.last_info['position'], thr=0.003):
             self._no_action_steps += 1
         else:
             self._no_action_steps = 0

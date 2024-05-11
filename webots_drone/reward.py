@@ -10,6 +10,7 @@ import numpy as np
 from webots_drone.utils import compute_distance
 from webots_drone.utils import compute_target_orientation
 from webots_drone.utils import check_target_distance
+from webots_drone.utils import check_same_position
 from webots_drone.utils import min_max_norm
 from webots_drone.utils import target_mask
 
@@ -22,32 +23,43 @@ def distance2reward(distance, ref_distance):
     return 1. - abs(1. - distance / ref_distance)
 
 
+def velocity2reward(velocity, pos_thr=0.003):
+    dist_diff = velocity
+    dist_diff *= np.abs(velocity).round(3) > pos_thr  # ensure minimum diff
+    # if dist_diff > 0.:
+    #     dist_diff *= 2.
+    return dist_diff / 0.03
+
+
 def compute_vector_reward(ref_position, pos_t, pos_t1, orientation_t1,
                           distance_target=36., distance_margin=5.):
     # compute orientation reward
     ref_orientation = compute_target_orientation(pos_t1, ref_position)
     r_orientation = orientation2reward(orientation_t1, ref_orientation)
-    r_orientation = (r_orientation - 1.) / 2.
+    # compute distance reward
+    ref_distance = distance_target - distance_margin / 2.
+    dist_t1 = compute_distance(pos_t1, ref_position)
+    r_distance = distance2reward(dist_t1, ref_distance)
     # compute velocity reward
     dist_t = compute_distance(pos_t, ref_position)
-    dist_t1 = compute_distance(pos_t1, ref_position)
-    dist_diff = dist_t - dist_t1
-    dist_diff *= np.abs(dist_diff).round(3) > 0.003  # ensure minimum diff
-    r_velocity = (dist_diff) / 0.03
+    r_velocity = velocity2reward(dist_t - dist_t1)
     # check zones
     zones = check_target_distance(dist_t1, distance_target,
                                   distance_margin / 2.)
-    # inverse when trespass goal distance
+    # inverse when trespass risk distance
     if zones[0]:
         r_velocity *= -1
-    # force velocity != 0
-    r_velocity -= 0.1
+
     # compose reward
-    r_sum = r_velocity + r_orientation
+    # r_sum = r_distance + r_velocity + r_orientation
+    r_sum = r_distance * 0.2 + r_velocity * 0.4 + r_orientation * 0.4
 
     # bonus in-distance
     if zones[1]:
-        r_sum += 2.1
+        r_sum += 2.
+    # penalty no movement
+    if check_same_position(pos_t, pos_t1):
+        r_sum -= 2.
 
     return r_sum
 

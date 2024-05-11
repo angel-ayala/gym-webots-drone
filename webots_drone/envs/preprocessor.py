@@ -143,20 +143,16 @@ def crop_from_center(img):
     return result
 
 
-def info2target_position(info, flight_area):
+def info2target_position(info):
     target_pos = info['target_position']
-    target_pos[-1] = max(target_pos[-1], flight_area[0][-1])
-    target_pos_norm = flight_area_norm_position(target_pos, flight_area)
-    return target_pos_norm
+    return target_pos
 
 
-def info2target_distance(info, flight_area):
+def info2target_distance(info):
     # distance
     uav_pos = info['position']
     target_pos = info['target_position']
-    if target_pos[-1] < flight_area[0][-1]:
-        target_pos[-1] = uav_pos[-1]
-    target_dist = compute_distance(uav_pos, target_pos)
+    target_dist = uav_pos - target_pos
     # orientation
     target_ori = compute_target_orientation(uav_pos[:2], target_pos[:2])
     ori_diff_norm = np.cos(target_ori - info['north_rad'])
@@ -205,9 +201,9 @@ class CustomVectorObservation(gym.Wrapper):
 
         self.target_dist = target_dist
         if target_dist:
-            obs_elems += 2 
-            obs_high_limits.extend([self.env.flight_area[1][0], 1.])
-            obs_low_limits.extend([0., -1.])
+            obs_elems += 4
+            obs_high_limits.extend([10., 10., 10., 1.])
+            obs_low_limits.extend([0., 0., 0., -1.])
         self.target_pos = target_pos
         if target_pos:
             obs_elems += 3
@@ -251,9 +247,9 @@ class CustomVectorObservation(gym.Wrapper):
             new_obs.append(obs[12])
 
         if self.target_dist:
-            new_obs.extend(info2target_distance(info, self.env.flight_area))
+            new_obs.extend(info2target_distance(info))
         if self.target_pos:
-            new_obs.extend(info2target_position(info, self.env.flight_area))
+            new_obs.extend(info2target_position(info))
         if self.target_dim:
             new_obs.extend(info2target_dim(info))
         # append action v_t-1

@@ -230,3 +230,8 @@ def check_target_distance(distance, distance_target, distance_margin=5.):
     in_zone = area_limits[0] <= distance < area_limits[1]
     out_zone = area_limits[1] <= distance
     return in_risk, in_zone, out_zone
+
+def check_same_position(pisition1, position2, thr=0.003):
+    dist_diff = compute_distance(pisition1, position2)
+    dist_diff *= np.abs(dist_diff).round(3) > 0.003
+    return dist_diff == 0.
