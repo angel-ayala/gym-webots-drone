@@ -246,12 +246,12 @@ class CustomVectorObservation(gym.Wrapper):
         if 'north' in self.uav_data:
             new_obs.append(obs[12])
 
-        if self.target_dist:
-            new_obs.extend(info2target_distance(info))
         if self.target_pos:
             new_obs.extend(info2target_position(info))
         if self.target_dim:
             new_obs.extend(info2target_dim(info))
+        if self.target_dist:
+            new_obs.extend(info2target_distance(info))
         # append action v_t-1
         if self.add_action:
             if len(self.env.action_space.shape) > 0:
@@ -295,51 +295,37 @@ class ReducedActionSpace(gym.Wrapper):
 
 
 class MultiModalObservation(gym.Wrapper):
-    # FIXME
-    def __init__(self, env: gym.Env, shape1=(3, 84, 84), shape2=(22, ),
-                 frame_stack=1, add_target=False, with_target_dim=False):
+    def __init__(self, env: gym.Env, uav_data=[
+            'imu', 'gyro', 'gps', 'gps_vel', 'north', 'dist_sensors'],
+            frame_stack=1, target_pos=False, target_dim=False,
+            target_dist=False, add_action=False):
         super().__init__(env)
-        self.rgb_obs = spaces.Box(low=0, high=1, shape=shape1,
-                                  dtype=np.float32)
-        self.vector_obs = spaces.Box(low=float('-inf'), high=float('inf'),
-                                     shape=shape2, dtype=np.float32)
+        self.rgb_obs = env.observation_space
+        self.env_vector = CustomVectorObservation(
+            env, uav_data, target_pos, target_dim, target_dist, add_action)
         self.frame_stack = frame_stack
-        self.add_target = add_target
-        self.with_target_dim = with_target_dim
-        if add_target:
-            obs_shape = np.asarray(shape2) + 3
-            if with_target_dim:
-                obs_shape += 2
-            obs_shape += self.env.action_space.shape[-1] if len(self.env.action_space.shape) > 0 else 1
-            self.vector_obs = spaces.Box(low=float('-inf'), high=float('inf'),
-                                         shape=obs_shape, dtype=np.float32)
+        self.vector_observation = self.env_vector.observation
 
         if frame_stack > 1:
-            env.observation_space = self.rgb_obs
             self.env_rgb = ObservationStack(env, k=frame_stack)
             self.rgb_obs = self.env_rgb.observation_space
-            env.observation_space = self.vector_obs
-            self.env_vector = ObservationStack(env, k=frame_stack)
+            self.env_vector = ObservationStack(self.env_vector, k=frame_stack)
             self.vector_obs = self.env_vector.observation_space
 
         self.observation_space = spaces.Tuple((self.rgb_obs, self.vector_obs))
 
-    def add_1d_target(self, obs, info):
-        return append_target_position(obs, info, self.env.flight_area)
-
-    def get_state(self):
+    def get_state(self, action):
         """Process the environment to get a state."""
         state_data = self.env.sim.get_data()
         # order sensors by dimension and split
         state_2d = self.env.get_observation_2d(state_data)
         state_1d = self.env.get_observation_1d(state_data)
-        if self.add_target:
-            state_1d = self.add_1d_target(state_1d, state_data)
+        state_1d = self.vector_observation(state_1d, state_data, action)
         return state_2d, state_1d
 
     def step(self, action):
         _, rews, terminateds, truncateds, info = self.env.step(action)
-        new_obs = self.get_state()
+        new_obs = self.get_state(action)
         
         if self.frame_stack > 1:
             self.env_rgb.frames.append(new_obs[0])
@@ -352,9 +338,7 @@ class MultiModalObservation(gym.Wrapper):
     def reset(self, **kwargs):
         """Resets the environment and normalizes the observation."""
         _, info = self.env.reset(**kwargs)
-        new_obs = self.get_state()
-        # append action v_t-1
-        new_obs[1] = append_action(new_obs[1], np.zeros_like(self.env.action_space.shape))
+        new_obs = self.get_state(np.zeros(self.action_space.shape))
         if self.frame_stack > 1:
             for _ in range(self.frame_stack):
                 self.env_rgb.frames.append(new_obs[0])

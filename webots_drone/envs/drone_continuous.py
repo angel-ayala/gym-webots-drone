@@ -13,12 +13,13 @@ from gym.utils import seeding
 
 from webots_drone import WebotsSimulation
 from webots_drone.utils import compute_distance
-from webots_drone.utils import check_flight_area
 from webots_drone.utils import check_collision
+from webots_drone.utils import check_flight_area
 from webots_drone.utils import check_flipped
 from webots_drone.utils import check_near_object
 from webots_drone.utils import min_max_norm
 from webots_drone.utils import check_same_position
+from webots_drone.utils import check_target_distance
 from webots_drone.reward import compute_vector_reward
 from webots_drone.reward import compute_visual_reward
 
@@ -78,8 +79,8 @@ class DroneEnvContinuous(gym.Env):
         self.init_runtime_vars()
         self._max_episode_steps = seconds2steps(time_limit_seconds, frame_skip,
                                                 self.sim.timestep)
-        self._max_no_action_steps = seconds2steps(max_no_action_seconds, frame_skip,
-                                                  self.sim.timestep)
+        self._max_no_action_steps = seconds2steps(
+            max_no_action_seconds, frame_skip, self.sim.timestep)
         self._frame_skip = frame_skip
         self._frame_inter = [frame_skip - 5., frame_skip + 5.]
         self._goal_threshold = goal_threshold
@@ -94,7 +95,7 @@ class DroneEnvContinuous(gym.Env):
              (self.flight_area[1][0], self.flight_area[0][1]),
              (self.flight_area[0][0], self.flight_area[0][1])])
         self.cuadrants /= 2.
-        self.reward_limits = [-2. - (2.21 * self._frame_inter[0]), 
+        self.reward_limits = [-2. - (2.21 * self._frame_inter[0]),
                               3.21 * self._frame_inter[1]]
 
     @property
@@ -140,13 +141,13 @@ class DroneEnvContinuous(gym.Env):
             cuadrant = self.np_random.integers(4)
         fire_pos = np.array(self.cuadrants[cuadrant])
         self.set_fire_position(fire_pos, noise_ratio=noise_ratio)
-    
+
     def get_observation_2d(self, state_data, norm=False):
         state_2d = info2image(state_data, output_size=self.obs_shape[-1])
         if norm:
             state_2d = normalize_pixels(state_2d)
         return state_2d
-    
+
     def get_observation_1d(self, state_data, norm=False):
         state_1d = info2obs_1d(state_data)
         if norm:
@@ -168,7 +169,7 @@ class DroneEnvContinuous(gym.Env):
 
     def compute_risk_dist(self, threshold=0.):
         return self.sim.get_risk_distance(threshold)
-    
+
     @property
     def distance_target(self):
         return self.sim.get_risk_distance(self._goal_threshold / 2.)
@@ -225,11 +226,6 @@ class DroneEnvContinuous(gym.Env):
             logger.info(f"[{info['timestamp']}] Penalty state, OutFlightArea")
             penalization -= 2.
             penalization_str = 'OutFlightArea|'
-        # risk zone trespassing
-        if self.sim.get_target_distance() < self.compute_risk_dist():
-            logger.info(f"[{info['timestamp']}] Penalty state, InsideRiskZone")
-            penalization -= 2.
-            penalization_str = 'InsideRiskZone|'
 
         if len(penalization_str) > 0:
             info['penalization'] = penalization_str
@@ -265,13 +261,25 @@ class DroneEnvContinuous(gym.Env):
             distance_target=self.distance_target,
             distance_margin=self._goal_threshold)
 
-        if self.is_pixels:
-            reward += compute_visual_reward(obs)
+        # if self.is_pixels:
+        #     reward += compute_visual_reward(obs)
+
+        zones = check_target_distance(self.sim.get_target_distance(),
+                                      self.distance_target,
+                                      self._goal_threshold)
+        # allow no action inside zone
+        # if zones[1]:
+        #     self._no_action_steps = 0
 
         # not terminal, must be avoided
         penalization = self.__compute_penalization(info)
         if penalization < 0:
             reward += penalization
+        # risk zone trespassing
+        if zones[0]:
+            logger.info(f"[{info['timestamp']}] Penalty state, InsideRiskZone")
+            reward -= 2.
+            info['penalization'] += 'InsideRiskZone|'
 
         # terminal states
         discount = self.__is_final_state(info)

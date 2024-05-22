@@ -26,8 +26,8 @@ def distance2reward(distance, ref_distance):
 def velocity2reward(velocity, pos_thr=0.003):
     dist_diff = velocity
     dist_diff *= np.abs(velocity).round(3) > pos_thr  # ensure minimum diff
-    # if dist_diff > 0.:
-    #     dist_diff *= 2.
+    if dist_diff > 0.:
+        dist_diff *= 3.
     return dist_diff / 0.03
 
 
@@ -49,14 +49,17 @@ def compute_vector_reward(ref_position, pos_t, pos_t1, orientation_t1,
     # inverse when trespass risk distance
     if zones[0]:
         r_velocity *= -1
+    # bonus in-distance
+    r_bonus = 0.
+    if zones[1]:
+        r_bonus = 2.
+        r_velocity = compute_distance(pos_t1, pos_t) / 0.035
 
     # compose reward
-    # r_sum = r_distance + r_velocity + r_orientation
-    r_sum = r_distance * 0.2 + r_velocity * 0.4 + r_orientation * 0.4
+    r_sum = r_distance + r_velocity + r_orientation
+    # r_sum = r_distance * 0.2 + r_velocity * 0.4 + r_orientation * 0.4
+    r_sum += r_bonus
 
-    # bonus in-distance
-    if zones[1]:
-        r_sum += 2.
     # penalty no movement
     if check_same_position(pos_t, pos_t1):
         r_sum -= 2.
