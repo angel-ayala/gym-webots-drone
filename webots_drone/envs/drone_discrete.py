@@ -33,7 +33,8 @@ class DroneEnvDiscrete(DroneEnvContinuous):
                  altitude_limits=[11, 75],
                  fire_pos=2,
                  fire_dim=[7., 3.5],
-                 is_pixels=True):
+                 is_pixels=True,
+                 zone_steps=0):
         super(DroneEnvDiscrete, self).__init__(
             time_limit_seconds=time_limit_seconds,
             max_no_action_seconds=max_no_action_seconds,
@@ -43,7 +44,8 @@ class DroneEnvDiscrete(DroneEnvContinuous):
             altitude_limits=altitude_limits,
             fire_pos=fire_pos,
             fire_dim=fire_dim,
-            is_pixels=is_pixels)
+            is_pixels=is_pixels,
+            zone_steps=zone_steps)
 
         # Action space discretized, roll, pitch, and yaw only
         control_limits = WebotsSimulation.get_control_ranges()

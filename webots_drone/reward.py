@@ -16,18 +16,16 @@ from webots_drone.utils import target_mask
 
 
 def orientation2reward(orientation, ref_orientation):
-    return np.cos(ref_orientation - orientation)
+    return (np.cos(ref_orientation - orientation) + 1.) / 2.
 
 
 def distance2reward(distance, ref_distance):
-    return 1. - abs(1. - distance / ref_distance)
+    return - abs(1. - distance / ref_distance)
 
 
 def velocity2reward(velocity, pos_thr=0.003):
     dist_diff = velocity
     dist_diff *= np.abs(velocity).round(3) > pos_thr  # ensure minimum diff
-    if dist_diff > 0.:
-        dist_diff *= 3.
     return dist_diff / 0.03
 
 
@@ -48,22 +46,22 @@ def compute_vector_reward(ref_position, pos_t, pos_t1, orientation_t1,
                                   distance_margin / 2.)
     # inverse when trespass risk distance
     if zones[0]:
-        r_velocity *= -1
+        r_velocity *= -1.
     # bonus in-distance
     r_bonus = 0.
     if zones[1]:
-        r_bonus = 2.
+        # r_bonus = 3.
         r_velocity = compute_distance(pos_t1, pos_t) / 0.035
+    # penalty no movement
+    elif check_same_position(pos_t, pos_t1):
+        r_bonus -= 2.
+    # if r_velocity < 0.:
+    #     r_velocity = r_velocity / 2.
 
     # compose reward
-    r_sum = r_distance + r_velocity + r_orientation
-    # r_sum = r_distance * 0.2 + r_velocity * 0.4 + r_orientation * 0.4
-    r_sum += r_bonus
-
-    # penalty no movement
-    if check_same_position(pos_t, pos_t1):
-        r_sum -= 2.
-
+    r_velocity = r_velocity * r_orientation  # [-1, 1]
+    r_pose = r_distance + r_orientation - 1  # ]-inf, 0]
+    r_sum = r_velocity + r_pose * 0.1 + r_bonus
     return r_sum
 
 
@@ -100,7 +98,8 @@ if __name__ == '__main__':
                 # Calculate distance reward
                 distance = compute_distance(position, ref_position)
                 distance_grid[i, j, 0] = distance
-                distance_grid[i, j, 1] = distance2reward(distance, ref_distance=36.5)
+                distance_grid[i, j, 1] = distance2reward(
+                    distance, ref_distance=36.5)
                 # Calculate orientation reward
                 orientation = compute_target_orientation(position, ref_position)
                 orientation_grid[i, j] = orientation2reward(orientation, ref_orientation)
@@ -172,7 +171,8 @@ if __name__ == '__main__':
     p_distance = distance_grid[:, :, 0]
     p_distance2 = -(p_distance - d_central) / d_central
     r_distance = distance_grid[:, :, 1]
-    r_dist_ori = r_distance * (r_orientation + 1.) / 2. - 1.
+    # r_dist_ori = r_distance * (r_orientation + 1.) / 2. - 1.
+    r_dist_ori = r_distance + (r_orientation - 1.) / 2.
 
     print('distance_rewards', r_distance.min(), r_distance.max())
     print('orientation_rewards', r_orientation.min(), r_orientation.max())

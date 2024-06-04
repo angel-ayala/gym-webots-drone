@@ -217,6 +217,9 @@ class ExperimentData:
     def __init__(self, history_path):
         self.history_path = Path(history_path)
         self.history_df = pd.read_csv(history_path)
+        self.count_update()
+
+    def count_update(self):
         self.learn_eps = self.history_df[
             self.history_df['phase'] == 'learn']['ep'].unique()
         self.eval_eps = self.history_df[
@@ -253,13 +256,17 @@ class ExperimentData:
 
         return state_data, actions_data, next_state_data
 
-    def get_trajectory_df(self, episode, iteration):
-        ep_idxs = self.history_df['ep'] == episode
-        iter_idxs = self.history_df['iteration'] == iteration
-        filtered_df = self.history_df[np.logical_and(ep_idxs, iter_idxs)]
+    def get_trajectory_df(self, phase, episode, iteration=False):
+        phase_df = self.history_df[self.history_df['phase'] == phase]
+        filtered_df = phase_df[phase_df['ep'] == episode]
+        if iteration:
+            iteration_idx = filtered_df['iteration'].unique(
+                ).tolist()[iteration]
+            filtered_df = filtered_df[
+                filtered_df['iteration'] == iteration_idx]
         return filtered_df
 
-    def get_ep_trajectories(self, episode_id, iterations=None, phase='eval'):
+    def get_ep_trajectories(self, episode_id, iteration_id=False, phase='eval'):
         if phase == 'eval':
             episode = self.eval_eps[episode_id]
         elif phase == 'learn':
@@ -267,22 +274,17 @@ class ExperimentData:
         else:
             raise ValueError(
                 "The phase argument must be either 'learn' or 'eval'.")
-        if iterations is None:
-            episode_df = self.history_df[self.history_df['phase'] == phase]
-            episode_df = episode_df[episode_df['ep'] == episode]
-            iterations = episode_df['iteration'].unique().tolist()
-        if type(iterations) != list:
-            iterations = [iterations]
+        if type(iteration_id) is not list:
+            iteration_id = [iteration_id]
         trajectories = list()
-        for i in iterations:
-            trajectory_df = self.get_trajectory_df(episode, i)
+        for i in iteration_id:
+            trajectory_df = self.get_trajectory_df(phase, episode, i)
             trajectory_length = len(trajectory_df)
             steps_reward = trajectory_df['reward']
             steps_stamp = trajectory_df['timestamp']
             trajectory_ori = trajectory_df['north_rad']
-            trajectory_target = trajectory_df[['target_pos_x',
-                                               'target_pos_y',
-                                               'target_pos_z']]
+            trajectory_target = trajectory_df[
+                ['target_pos_x', 'target_pos_y', 'target_pos_z']]
             s, a, s_t1 = self.get_tuple_control(trajectory_df)
             trajectories.append((trajectory_length,
                                  s_t1[0, :3],  # initial pos
@@ -293,7 +295,6 @@ class ExperimentData:
                                  s,  # state
                                  a,  # action
                                  s_t1))  # next state
-
         return trajectories
 
     def iter_trajectory(self, trajectory):

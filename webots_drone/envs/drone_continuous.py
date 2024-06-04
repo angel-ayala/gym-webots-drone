@@ -47,7 +47,8 @@ class DroneEnvContinuous(gym.Env):
                  altitude_limits=[11, 75],
                  fire_pos=2,
                  fire_dim=[7., 3.5],
-                 is_pixels=True):
+                 is_pixels=True,
+                 zone_steps=0):
         # Simulation controller
         logger.info('Checking Webots connection...')
         self.sim = WebotsSimulation()
@@ -97,6 +98,7 @@ class DroneEnvContinuous(gym.Env):
         self.cuadrants /= 2.
         self.reward_limits = [-2. - (2.21 * self._frame_inter[0]),
                               3.21 * self._frame_inter[1]]
+        self.zone_steps = zone_steps if zone_steps > 0 else float('inf')
 
     @property
     def action_limits(self):
@@ -112,6 +114,7 @@ class DroneEnvContinuous(gym.Env):
     def init_runtime_vars(self):
         self._episode_steps = 0  # time limit control
         self._no_action_steps = 0  # no action control
+        self._in_zone_steps = 0  # time inside zone control
         self._end = False  # episode end flag
         self._prev_distance = 0  # reward helper
         self.last_info = dict()
@@ -183,10 +186,10 @@ class DroneEnvContinuous(gym.Env):
             self._no_action_steps = 0
         return self._no_action_steps >= self._max_no_action_steps
 
-    def __is_final_state(self, info):
+    def __is_final_state(self, info, zones):
         discount = 0
         # no action limit
-        if self.__no_action_limit(info["position"]):
+        if self.__no_action_limit(info["position"]) and not zones[1]:
             logger.info(f"[{info['timestamp']}] Final state, Same position")
             discount -= 2.
             info['final'] = 'No Action'
@@ -268,8 +271,10 @@ class DroneEnvContinuous(gym.Env):
                                       self.distance_target,
                                       self._goal_threshold)
         # allow no action inside zone
-        # if zones[1]:
-        #     self._no_action_steps = 0
+        if zones[1]:
+            self._in_zone_steps += 1
+        else:
+            self._in_zone_steps = 0
 
         # not terminal, must be avoided
         penalization = self.__compute_penalization(info)
@@ -282,7 +287,7 @@ class DroneEnvContinuous(gym.Env):
             info['penalization'] += 'InsideRiskZone|'
 
         # terminal states
-        discount = self.__is_final_state(info)
+        discount = self.__is_final_state(info, zones)
         if discount < 0:
             self._end = True
             reward += discount
@@ -342,6 +347,7 @@ class DroneEnvContinuous(gym.Env):
     def step(self, action):
         """Perform an action step in the simulation scene."""
         reward = 0
+        truncated = False
         # reaction time
         react_frames = self.np_random.integers(low=self._frame_inter[0],
                                                high=self._frame_inter[1],
@@ -359,13 +365,18 @@ class DroneEnvContinuous(gym.Env):
             logger.info(f"[{info['timestamp']}] Final state, Time limit")
             self._end = True
             info['final'] = 'time_limit'
+        # goal state
+        if self._in_zone_steps >= self.zone_steps:
+            logger.info(f"[{info['timestamp']}] Final state, Goal reached")
+            truncated = True
+            info['final'] = 'goal_found'
 
         # normalize step reward
         # reward = self.norm_reward(reward)
 
         self.last_state, self.last_info = observation, info
 
-        return observation, reward, self._end, False, info
+        return observation, reward, self._end, truncated, info
 
     def render(self, mode='human'):
         """Render the environment from Webots simulation."""
