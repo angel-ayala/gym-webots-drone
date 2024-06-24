@@ -224,8 +224,8 @@ def compute_target_orientation(position, ref_position):
 
 
 def check_target_distance(distance, distance_target, distance_margin=5.):
-    area_limits = (distance_target - distance_margin,
-                   distance_target + distance_margin)
+    area_limits = (distance_target - distance_margin / 2.,
+                   distance_target + distance_margin / 2.)
     in_risk = distance < area_limits[0]
     in_zone = area_limits[0] <= distance < area_limits[1]
     out_zone = area_limits[1] <= distance

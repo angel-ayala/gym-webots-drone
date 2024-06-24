@@ -35,15 +35,13 @@ def compute_vector_reward(ref_position, pos_t, pos_t1, orientation_t1,
     ref_orientation = compute_target_orientation(pos_t1, ref_position)
     r_orientation = orientation2reward(orientation_t1, ref_orientation)
     # compute distance reward
-    ref_distance = distance_target - distance_margin / 2.
     dist_t1 = compute_distance(pos_t1, ref_position)
-    r_distance = distance2reward(dist_t1, ref_distance)
+    r_distance = distance2reward(dist_t1, distance_target)
     # compute velocity reward
     dist_t = compute_distance(pos_t, ref_position)
     r_velocity = velocity2reward(dist_t - dist_t1)
     # check zones
-    zones = check_target_distance(dist_t1, distance_target,
-                                  distance_margin / 2.)
+    zones = check_target_distance(dist_t1, distance_target, distance_margin)
     # inverse when trespass risk distance
     if zones[0]:
         r_velocity *= -1.
