@@ -9,8 +9,10 @@ import json
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import re
 from webots_drone.envs.preprocessor import info2state
 from webots_drone.envs.drone_discrete import DroneEnvDiscrete
+from webots_drone.utils import compute_risk_distance
 
 
 class SetEpisode:
@@ -214,34 +216,81 @@ class StoreStepData:
 
 
 class ExperimentData:
-    def __init__(self, history_path):
-        self.history_path = Path(history_path)
-        self.history_df = pd.read_csv(history_path)
-        self.count_update()
+    def __init__(self, experiment_path, csv_name='history_training.csv',
+                 env_args='args_environment.json',
+                 train_args='args_training.json',
+                 agent_args='args_agent.json'):
+        if not isinstance(experiment_path, Path):
+            experiment_path = Path(experiment_path)
+        self.experiment_path = experiment_path
+        print('Loading experiment data from:', self.experiment_path)
+        self.history_df = pd.read_csv(self.experiment_path / csv_name)
+        self.env_params = read_args(self.experiment_path / env_args)
+        self.train_params = read_args(self.experiment_path / train_args)
+        self.agent_params = read_args(self.experiment_path / agent_args)
+        # append evaluation results
+        self.join_eval_data()
 
-    def count_update(self):
-        self.learn_eps = self.history_df[
-            self.history_df['phase'] == 'learn']['ep'].unique()
-        self.eval_eps = self.history_df[
-            self.history_df['phase'] == 'eval']['ep'].unique()
+    def join_eval_data(self, csv_regex=r'history_eval_*.csv'):
+        csv_paths = list(self.experiment_path.rglob(csv_regex))
+        csv_paths.sort()
+        eval_df = None
+        for csv_path in csv_paths:
+            print('Loading evaluation data from:', csv_path)
+            ep_df = pd.read_csv(csv_path)
+            if eval_df is None:
+                eval_df = ep_df.copy()
+            else:
+                eval_df = pd.concat((eval_df, ep_df))
+        if eval_df is not None:
+            self.history_df = pd.concat((self.history_df, eval_df))
+
+    def get_reward_curve(self, phase='eval'):
+        phase_df = self.history_df[self.history_df['phase'] == phase]
+        reward_values = phase_df.groupby('ep').agg({'reward': 'sum'})
+        return reward_values.to_numpy().flatten()
+
+    def get_flight_area(self, world_name='forest_tower_200x200_simple'):
+        import webots_drone
+
+        with open(Path(webots_drone.__path__[0] +
+                       f"/../worlds/{world_name}.wbt"), 'r') as world_dump:
+            world_file = world_dump.read()
+
+        area_size_regex = re.search(
+            r"DEF FlightArea(.*\n)+  size( \-?\d+\.?\d?){2}\n",
+            world_file)
+        area_size_str = area_size_regex.group().strip()
+        area_size = list(map(float, area_size_str.split(' ')[-2:]))
+        # print('area_size', area_size)
+
+        area_size = [fs / 2 for fs in area_size]  # size from center
+        flight_area = [[fs * -1 for fs in area_size], area_size]
+
+        # add altitude limits
+        flight_area[0].append(self.env_params['altitude_limits'][0])
+        flight_area[1].append(self.env_params['altitude_limits'][1])
+
+        return flight_area
 
     def get_tuple_control(self, filtered_df):
         state_cols = ['pos_x', 'pos_y', 'pos_z',
                       'ori_x', 'ori_y', 'ori_z',
                       'vel_x', 'vel_y', 'vel_z',
-                      'velang_x', 'velang_y', 'velang_z',]
-        action_cols = ['action']
+                      'velang_x', 'velang_y', 'velang_z',
+                      'north_rad']
+        action_col = 'action'
         next_state_cols = ['next_' + sc for sc in state_cols]
         state_data = filtered_df[state_cols].to_numpy()
         next_state_data = filtered_df[next_state_cols].to_numpy()
         actions_data = np.zeros((len(filtered_df), 4))
 
         for i, (idx, row) in enumerate(filtered_df.iterrows()):
-            if isinstance(row['action'], int):
+            if isinstance(row[action_col], int):
                 actions_data[i] = DroneEnvDiscrete.discrete2continuous(
-                    row['action'])
-            elif isinstance(row['action'], str):
-                numbers = row['action'].split()
+                    row[action_col])
+            elif isinstance(row[action_col], str):
+                numbers = row[action_col].split()
                 if numbers[0] == '[':
                     numbers = numbers[1:]
                 if numbers[-1] == ']':
@@ -250,51 +299,66 @@ class ExperimentData:
                 daction = daction.replace('[', '').replace(']', '')
                 if len(numbers) == 3:
                     daction += ' 0.'
-                actions_data[i] = np.fromstring(daction, dtype=np.float32, sep=' ')
+                actions_data[i] = np.fromstring(daction, dtype=np.float32,
+                                                sep=' ')
             else:
-                actions_data[i] = row['action']
+                actions_data[i] = row[action_col]
 
         return state_data, actions_data, next_state_data
 
-    def get_trajectory_df(self, phase, episode, iteration=False):
+    def get_phase_eps(self, phase):
+        avbl_phase = self.history_df['phase'].unique().tolist()
+        assert phase in avbl_phase, \
+            f"The phase argument must be in {avbl_phase}."
         phase_df = self.history_df[self.history_df['phase'] == phase]
-        filtered_df = phase_df[phase_df['ep'] == episode]
-        if iteration:
-            iteration_idx = filtered_df['iteration'].unique(
-                ).tolist()[iteration]
-            filtered_df = filtered_df[
-                filtered_df['iteration'] == iteration_idx]
+        return phase_df['ep'].unique().tolist()
+
+    def get_episode_df(self, episode, phase='eval', iteration=None):
+        episode_id = self.get_phase_eps(phase)[episode]
+        filtered_df = self.history_df[
+            np.logical_and(self.history_df['phase'] == phase,
+                           self.history_df['ep'] == episode_id)]
+        if iteration is not None:
+            iter_idx = filtered_df['iteration'].unique().tolist()[iteration]
+            filtered_df = filtered_df[filtered_df['iteration'] == iter_idx]
         return filtered_df
 
-    def get_ep_trajectories(self, episode_id, iteration_id=False, phase='eval'):
-        if phase == 'eval':
-            episode = self.eval_eps[episode_id]
-        elif phase == 'learn':
-            episode = self.learn_eps[episode_id]
+    def get_goal_distance(self):
+        risk_distance = compute_risk_distance(*self.env_params['fire_dim'])
+        return risk_distance + self.env_params['goal_threshold'] / 2.
+
+    def get_ep_trajectories(self, episode, phase='eval', iteration=None):
+        episode_df = self.get_episode_df(episode, phase)
+        episode_iters = episode_df['iteration'].unique().tolist()
+
+        if iteration is None:
+            iteration_id = episode_iters
+        elif type(iteration) is list:
+            iteration_id = [episode_iters[i] for i in iteration]
         else:
-            raise ValueError(
-                "The phase argument must be either 'learn' or 'eval'.")
-        if type(iteration_id) is not list:
-            iteration_id = [iteration_id]
+            iteration_id = [episode_iters[iteration]]
+
         trajectories = list()
         for i in iteration_id:
-            trajectory_df = self.get_trajectory_df(phase, episode, i)
-            trajectory_length = len(trajectory_df)
-            steps_reward = trajectory_df['reward']
-            steps_stamp = trajectory_df['timestamp']
-            trajectory_ori = trajectory_df['north_rad']
-            trajectory_target = trajectory_df[
-                ['target_pos_x', 'target_pos_y', 'target_pos_z']]
-            s, a, s_t1 = self.get_tuple_control(trajectory_df)
-            trajectories.append((trajectory_length,
-                                 s_t1[0, :3],  # initial pos
-                                 trajectory_target.head(1).to_numpy()[0], # target
-                                 steps_stamp.to_numpy(),  # timemarks
-                                 steps_reward.to_numpy(),  # rewards
-                                 trajectory_ori.to_numpy(),  # orientation
-                                 s,  # state
-                                 a,  # action
-                                 s_t1))  # next state
+            trj = dict()
+            trj_df = episode_df[episode_df['iteration'] == i]
+            s, a, s_t1 = self.get_tuple_control(trj_df)
+            trj['success'] = (trj_df['final'] == 'goal_found').sum() >= 1
+            trj['steps'] = len(trj_df)
+            trj['length'] = np.linalg.norm(
+                s_t1[:, :2] - s[:, :2], axis=1).sum()
+            trj['rewards'] = trj_df['reward'].to_numpy()
+            trj['timestamp'] = trj_df['timestamp'].to_numpy()
+            trj['initial_pos'] = s[0, :3]
+            trj['target_pos'] = trj_df[
+                ['target_pos_x', 'target_pos_y', 'target_pos_z']
+                ].head(1).to_numpy()[0]
+            trj['states'] = s
+            trj['actions'] = a
+            trj['next_states'] = s_t1
+            trj['target_dists'] = np.linalg.norm(
+                trj['target_pos'] - trj['states'][:, :3], axis=1)
+            trajectories.append(trj)
         return trajectories
 
     def iter_trajectory(self, trajectory):
@@ -305,7 +369,6 @@ class ExperimentData:
             x_t = state[step] if step == 0 else state[step] - next_state[step]
             u_t = action[step].copy()
             yield x_t, u_t
-
 
 
 class VideoCallback:
