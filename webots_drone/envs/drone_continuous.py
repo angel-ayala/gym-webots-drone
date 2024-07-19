@@ -233,7 +233,7 @@ class DroneEnvContinuous(gym.Env):
         if zones[0]:
             logger.info(f"[{info['timestamp']}] Penalty state, InsideRiskZone")
             penalization -= 2.
-            info['penalization'] += 'InsideRiskZone|'
+            penalization_str += 'InsideRiskZone|'
 
         if len(penalization_str) > 0:
             info['penalization'] = penalization_str
