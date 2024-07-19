@@ -194,10 +194,6 @@ class CustomVectorObservation(gym.Wrapper):
             obs_elems += 1
             obs_high_limits.append(np.pi)
             obs_low_limits.append(-np.pi)
-        if 'dist_sensors' in uav_data:
-            obs_elems += 9
-            obs_high_limits.extend([1. for _ in range(9)])
-            obs_low_limits.extend([0. for _ in range(9)])
 
         self.target_dist = target_dist
         if target_dist:
@@ -226,6 +222,11 @@ class CustomVectorObservation(gym.Wrapper):
                 obs_high_limits.append(self.env.action_space.n)
                 obs_low_limits.append(0)
             obs_elems += self.action_vars
+
+        if 'dist_sensors' in uav_data:
+            obs_elems += 9
+            obs_high_limits.extend([1. for _ in range(9)])
+            obs_low_limits.extend([0. for _ in range(9)])
 
         obs_shape = np.asarray(self.env.observation_space.shape)
         obs_shape[-1] = obs_elems

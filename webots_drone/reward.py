@@ -48,7 +48,7 @@ def compute_vector_reward(ref_position, pos_t, pos_t1, orientation_t1,
     # bonus in-distance
     r_bonus = 0.
     if zones[1]:
-        # r_bonus = 3.
+        r_bonus = 3.
         r_velocity = compute_distance(pos_t1, pos_t) / 0.035
     # penalty no movement
     elif check_same_position(pos_t, pos_t1):

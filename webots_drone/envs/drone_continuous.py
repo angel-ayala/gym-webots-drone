@@ -201,7 +201,7 @@ class DroneEnvContinuous(gym.Env):
 
         return discount
 
-    def __compute_penalization(self, info):
+    def __compute_penalization(self, info, zones):
         near_object_threshold = [150 / 4000,  # front left
                                  150 / 4000,  # front right
                                  150 / 3200,  # rear top
@@ -229,6 +229,11 @@ class DroneEnvContinuous(gym.Env):
             logger.info(f"[{info['timestamp']}] Penalty state, OutFlightArea")
             penalization -= 2.
             penalization_str = 'OutFlightArea|'
+        # risk zone trespassing
+        if zones[0]:
+            logger.info(f"[{info['timestamp']}] Penalty state, InsideRiskZone")
+            penalization -= 2.
+            info['penalization'] += 'InsideRiskZone|'
 
         if len(penalization_str) > 0:
             info['penalization'] = penalization_str
@@ -277,14 +282,9 @@ class DroneEnvContinuous(gym.Env):
             self._in_zone_steps = 0
 
         # not terminal, must be avoided
-        penalization = self.__compute_penalization(info)
+        penalization = self.__compute_penalization(info, zones)
         if penalization < 0:
             reward += penalization
-        # risk zone trespassing
-        if zones[0]:
-            logger.info(f"[{info['timestamp']}] Penalty state, InsideRiskZone")
-            reward -= 2.
-            info['penalization'] += 'InsideRiskZone|'
 
         # terminal states
         discount = self.__is_final_state(info, zones)
@@ -363,7 +363,7 @@ class DroneEnvContinuous(gym.Env):
         # timeout limit
         if self.__time_limit():
             logger.info(f"[{info['timestamp']}] Final state, Time limit")
-            self._end = True
+            truncated = True
             info['final'] = 'time_limit'
         # goal state
         if self._in_zone_steps >= self.zone_steps:
