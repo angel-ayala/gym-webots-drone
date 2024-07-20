@@ -12,7 +12,6 @@ from gym import spaces, logger
 from gym.utils import seeding
 
 from webots_drone import WebotsSimulation
-from webots_drone.utils import compute_distance
 from webots_drone.utils import check_collision
 from webots_drone.utils import check_flight_area
 from webots_drone.utils import check_flipped
@@ -90,12 +89,13 @@ class DroneEnvContinuous(gym.Env):
         self.flight_area = np.array(self.sim.get_flight_area(altitude_limits))
         self.init_altitude = init_altitude
         self.viewer = None
-        self.cuadrants = np.array(
+        self.quadrants = np.array(
             [(self.flight_area[0][0], self.flight_area[1][1]),
              (self.flight_area[1][0], self.flight_area[1][1]),
              (self.flight_area[1][0], self.flight_area[0][1]),
              (self.flight_area[0][0], self.flight_area[0][1])])
-        self.cuadrants /= 2.
+        self.quadrants /= 2.
+        self.sample_quadrants = list()
         self.reward_limits = [-2. - (2.21 * self._frame_inter[0]),
                               3.21 * self._frame_inter[1]]
         self.zone_steps = zone_steps if zone_steps > 0 else float('inf')
@@ -131,19 +131,22 @@ class DroneEnvContinuous(gym.Env):
         self.sim.seed(seed2)
         return [seed1, seed2]
 
-    def set_fire_position(self, position, noise_ratio=0.):
+    def set_fire_position(self, position, noise_prob=0.):
         offset = 0
-        if self.np_random.random() < noise_ratio:
+        if self.np_random.random() < noise_prob:
             offset = self.np_random.random()
+        logger.info(f"Starting fire in position {position} with offset = {offset}.")
         self.sim.set_fire(position + offset, *self._fire_dim,
                           dist_threshold=self._goal_threshold * 1.5)
 
-    def set_fire_cuadrant(self, cuadrant=None, noise_ratio=0.):
-        logger.info(f"Starting fire in cuadrant {cuadrant} with {noise_ratio} noise.")
-        if cuadrant is None:
-            cuadrant = self.np_random.integers(4)
-        fire_pos = np.array(self.cuadrants[cuadrant])
-        self.set_fire_position(fire_pos, noise_ratio=noise_ratio)
+    def set_fire_quadrant(self, quadrant=None, noise_prob=0.):
+        if quadrant is None:
+            # random shuffle quadrant with no reposition
+            if len(self.sample_quadrants) == 0:
+                self.sample_quadrants = list(range(len(self.quadrants)))
+                self.np_random.shuffle(self.sample_quadrants)
+            quadrant = self.sample_quadrants.pop(0)
+        self.set_fire_position(self.quadrants[quadrant], noise_prob=noise_prob)
 
     def get_observation_2d(self, state_data, norm=False):
         state_2d = info2image(state_data, output_size=self.obs_shape[-1])
@@ -327,15 +330,13 @@ class DroneEnvContinuous(gym.Env):
 
         self.perform_action([0., 0., 0., 0.])  # no action
 
-    def reset(self, seed=None, fire_cuadrant=None, **kwargs):
+    def reset(self, seed=None, fire_quadrant=None, **kwargs):
         """Reset episode in the Webots simulation."""
         # restart simulation
         self.seed(seed)
         self.sim.reset()
-        if fire_cuadrant is None:
-            self.set_fire_cuadrant(self._fire_pos)
-        else:
-            self.set_fire_cuadrant(fire_cuadrant)
+        fquadrant = self._fire_pos if fire_quadrant is None else fire_quadrant
+        self.set_fire_quadrant(fquadrant)
         self.sim.play_fast()
         self.sim.sync()
         self.lift_uav(self.init_altitude)
