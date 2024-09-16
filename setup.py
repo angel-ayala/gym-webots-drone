@@ -4,16 +4,17 @@ package_name = 'webots_drone'
 
 data_files = list()
 data_files.append(('share/' + package_name + '/worlds',
-                   ['worlds/forest_tower.wbt']))
+                   ['worlds/forest_tower.wbt',
+                    'worlds/forest_tower_200x200_simple.wbt']))
 
 data_files.append(('share/' + package_name + '/protos',
                    ['protos/RadioController.proto',
-                   'protos/FireSmoke.proto']))
+                    'protos/FireSmoke.proto']))
 
 setup(
     name=package_name,
-    version='1.4.0',    
-    description='Gym wrapper for Webots simulations scene with the DJI Mavic Pro 2 drone',
+    version='1.8.0',
+    description='Gym wrapper for Webots simulation scenesa with the DJI Mavic Pro 2 drone',
     url='https://github.com/angel-ayala/gym-webots-drone',
     author='Angel Ayala',
     author_email='aaam@ecomp.poli.br',
@@ -27,7 +28,7 @@ setup(
         'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Science/Research',
         'Intended Audience :: Education',
-        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',  
+        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Operating System :: POSIX :: Linux',
         'Programming Language :: Python :: 3.10',
         'Topic :: Games/Entertainment :: Simulation',

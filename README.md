@@ -14,75 +14,70 @@ Learning agent to control a drone under a fire emergency context. In order to ma
 
 There are currently two environments which differs in the action’s domain space.
 
-- `webots_drone/DroneEnvContinuous-v0` presents a continuous action space domain composed by a 4-elements vector represented by $`\{\phi, \theta, \psi, thrust\}`$ corresponding to roll, pitch, and yaw angles, and the altitude desired for the drone.
+- `webots_drone/DroneEnvContinuous-v0` presents a continuous action space domain composed by a 4-elements vector represented by {$`\phi, \theta, \psi,`$ throttle} corresponding to roll, pitch, and yaw angles, and the altitude desired for the drone.
     - $`\phi`$ is related to the translation in x-axis moving the drone to the left or the right.
     - $`\theta`$ is related to the translation in y-axis moving the drone forward or backward.
     - $`\psi`$ is related to the rotation in z-axis and rotates the drone in counter- or clockwise directions.
-    - $`thrust`$ is related to the translation in z-axis and move the drone in up or
+    - throttle is related to the translation in z-axis and move the drone up or
     down.
 - `webots_drone/DroneEnvDiscrete-v0` is an extension of `DroneEnvContinuous-v0` with a discrete action space domain composed by a 6 actions + 1 no-action posibilities. The action is
 discretized and the same step logic from the continuous domain is applied. It is considered two actions for each continuous degree-of-freedom and a fixed altituted resulting in:
     - Action 0: no-action
     - Action 1: affects $`\phi`$ with $`\pi / 12 => [\pi / 12, 0, 0, 0]`$
-    - Action 2: affects $`\theta`$ with $`\pi / 12 => [0, \pi / 12, 0, 0]`$
-    - Action 3: affects $`\psi`$ with $`\pi => [0, 0, \pi, 0]`$
-    - Action 4: affects $`\phi`$ with $`-\pi / 12 => [-\pi / 12, 0, 0, 0]`$
-    - Action 5: affects $`\theta`$ with $`-\pi / 12 => [0, -\pi / 12, 0, 0]`$
+    - Action 2: affects $`\phi`$ with $`-\pi / 12 => [-\pi / 12, 0, 0, 0]`$
+    - Action 3: affects $`\theta`$ with $`\pi / 12 => [0, \pi / 12, 0, 0]`$
+    - Action 4: affects $`\theta`$ with $`-\pi / 12 => [0, -\pi / 12, 0, 0]`$
+    - Action 5: affects $`\psi`$ with $`\pi => [0, 0, \pi, 0]`$
     - Action 6: affects $`\psi`$ with $`-\pi => [0, 0, -\pi, 0]`$
 
 The observation space is a high-dimensional image, represented by the drone’s $`400 \times 240`$ pixels BGRA channels camera image. The observation is processed to get an image with RGB channels and values $`\in [0, 255]`$.
+Additionally, the observation space also includes a low-dimensional sensor readings such as IMU, Gyroscope, GPS, and Magnetometer.
 
 ## Reward function
 
 ~~The reward function is the Euclidean distance between the drone’s position and the safe zone edge, calculated in from the fire location (target position). The safe zone edge is defined at the fire location as base, add the radius size is 4 times the fire’s height. This reward function start with a under zero value, and increase while the drone is getting close of the fire location. If this value is great than zero, the episode’s end. The reward function is defined as follows:~~
 
-The reward signal comprises a two component value of distance and orientation. The value distance is the difference between the target position and the UAV position with two threshold values corresponding to the range are of detection and the nearest it can reach. The following methods implements it:
+The reward signal comprises three components regard the velocity, pose and bonus/penalty values. The following methods implements it:
 
 ```python
-def compute_direction_vector(position, orientation, ref_position):
-    # Calculate the vector pointing from the agent position to the target position
-    vector_to_target = np.array(ref_position) - np.array(position)
-    # Normalize the vector
-    norm_vector_to_target = vector_to_target / np.linalg.norm(vector_to_target)
-    # Calculate the agent's forward vector based on its orientation
-    agent_forward_vector = np.array([np.cos(orientation),
-                                     np.sin(orientation)])
+def compute_vector_reward(ref_position, pos_t, pos_t1, orientation_t1,
+                          distance_target=36., distance_margin=5.):
+    # compute orientation reward
+    ref_orientation = compute_target_orientation(pos_t1, ref_position)
+    r_orientation = orientation2reward(orientation_t1, ref_orientation)
+    # compute distance reward
+    dist_t1 = compute_distance(pos_t1, ref_position)
+    r_distance = distance2reward(dist_t1, distance_target)
+    # compute velocity reward
+    dist_t = compute_distance(pos_t, ref_position)
+    r_velocity = velocity2reward(dist_t - dist_t1)
+    # check zones
+    zones = check_target_distance(dist_t1, distance_target, distance_margin)
+    # inverse when trespass risk distance
+    if zones[0]:
+        r_velocity *= -1.
+    # bonus in-distance
+    r_bonus = 0.
+    if zones[1]:
+        r_bonus = 3.
+        r_velocity = compute_distance(pos_t1, pos_t) / 0.035
+    # penalty no movement
+    elif check_same_position(pos_t, pos_t1):
+        r_bonus -= 2.
+    # if r_velocity < 0.:
+    #     r_velocity = r_velocity / 2.
 
-    return norm_vector_to_target, agent_forward_vector
-
-def compute_orientation_reward(position, orientation, ref_position):
-    # Get direction vectors
-    direction_to_target, agent_forward = compute_direction_vector(
-        position, orientation, ref_position)
-
-    # Calculate cosine similarity between the direction to the target and agent's forward direction
-    cosine_similarity = np.dot(direction_to_target, agent_forward)
-
-    return (cosine_similarity - 1.) / 2.
-
-def compute_distance_reward(position, ref_position, distance_max=50.,
-                            distance_threshold=25., threshold_offset=5.):
-    curr_distance = compute_distance(position, ref_position)
-    safety_distance = distance_threshold - threshold_offset / 2
-    reward = 1 - abs(1 - curr_distance / safety_distance)
-    reward = max(-1., reward)
-
-    if curr_distance < distance_threshold - threshold_offset:
-        return -1.
-
-    return (reward - 1.) / 2.
-
-def sum_and_normalize(orientation_rewards, distance_rewards, distance_diff=1.):
-    r_distance = (distance_rewards + 1.)
-    r_orientation = (orientation_rewards + 1.)
-    r_sum = r_distance * r_orientation * (distance_diff != 0.)
-    return r_sum - 1.
+    # compose reward
+    r_velocity = r_velocity * r_orientation  # [-1, 1]
+    r_pose = r_distance + r_orientation - 1  # ]-inf, 0]
+    r_sum = r_velocity + r_pose * 0.1 + r_bonus
+    return r_sum
 ```
 
 Additionally some penalties were considered to ensure safety and energy efficiency. A ring zone delimitates the risk area which the UAV must avoid because can suffer damage. Very near to it there is the goal region which is the closest area to reach around the fire. A square area delimitates the allowed flight area to avoid the drone go far away. As safety must be asure to flight far enough of obstacles, adding a penalization if is near of any object or if collided with it. The following method implements it.
 
 ```python
-def __compute_penalization(self, info, curr_distance):
+def __compute_penalization(self, info, zones):
     near_object_threshold = [150 / 4000,  # front left
                              150 / 4000,  # front right
                              150 / 3200,  # rear top
@@ -97,24 +92,24 @@ def __compute_penalization(self, info, curr_distance):
     # object_near
     if any(check_near_object(info["dist_sensors"],
                              near_object_threshold)):
-        logger.info(f"[{info['timestamp']}] Warning state, ObjectNear")
-        penalization -= 10
+        logger.info(f"[{info['timestamp']}] Penalty state, ObjectNear")
+        penalization -= 1.
         penalization_str += 'ObjectNear|'
-    # outside flight area
-    if any(check_flight_area(info["position"], self.flight_area)):
-        logger.info(f"[{info['timestamp']}] Warning state, OutFlightArea")
-        penalization -= 10
-        penalization_str += 'OutFlightArea|'
     # is_collision
     if any(check_collision(info["dist_sensors"])):
-        logger.info(f"[{info['timestamp']}] Warning state, Near2Collision")
-        penalization -= 10
+        logger.info(f"[{info['timestamp']}] Penalty state, Near2Collision")
+        penalization -= 2.
         penalization_str += 'Near2Collision|'
+    # outside flight area
+    if any(check_flight_area(info["position"], self.flight_area)):
+        logger.info(f"[{info['timestamp']}] Penalty state, OutFlightArea")
+        penalization -= 2.
+        penalization_str = 'OutFlightArea|'
     # risk zone trespassing
-    if curr_distance < self.sim.risk_distance:
-        logger.info(f"[{info['timestamp']}] Warning state, InsideRiskZone")
-        penalization -= 10
-        penalization_str += 'InsideRiskZone'
+    if zones[0]:
+        logger.info(f"[{info['timestamp']}] Penalty state, InsideRiskZone")
+        penalization -= 2.
+        penalization_str += 'InsideRiskZone|'
 
     if len(penalization_str) > 0:
         info['penalization'] = penalization_str
@@ -138,38 +133,44 @@ def compute_reward(self, obs, info):
     """
     info['penalization'] = 'no'
     info['final'] = 'no'
-    # terminal states
-    discount, end = self.__is_final_state(info)
-    if end:
-        self._end = end
-        return discount
 
     # 2 dimension considered
     if len(self.last_info.keys()) == 0:
-        uav_pos_t = info['position'][:2]  # pos_t+1
+        uav_pos_t = info['position'][:2]  # pos_t
     else:
         uav_pos_t = self.last_info['position'][:2]  # pos_t
     uav_pos_t1 = info['position'][:2]  # pos_t+1
-    uav_ori = info['north_rad']
+    uav_ori_t1 = info['north_rad']  # orientation_t+1
     target_xy = self.sim.get_target_pos()[:2]
 
-    # not terminal, must be avoided
-    goal_distance = compute_distance(uav_pos_t1, target_xy)
-    penalization = self.__compute_penalization(info, goal_distance)
-    if penalization != 0:
-        return penalization
-
     # compute reward components
-    orientation_reward = compute_orientation_reward(uav_pos_t, uav_ori,
-                                                    target_xy)
-    distance_reward = compute_distance_reward(
-        uav_pos_t, target_xy, distance_max=50.,
-        distance_threshold=np.sum(self._goal_threshold),
-        threshold_offset=self._goal_threshold[1])
+    reward = compute_vector_reward(
+        target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
+        distance_target=self.distance_target,
+        distance_margin=self._goal_threshold)
 
-    distance_diff = compute_distance(uav_pos_t, uav_pos_t1)
-    reward = sum_rewards(orientation_reward, distance_reward,
-                         distance_diff=distance_diff)
+    # if self.is_pixels:
+    #     reward += compute_visual_reward(obs)
+
+    zones = check_target_distance(self.sim.get_target_distance(),
+                                  self.distance_target,
+                                  self._goal_threshold)
+    # allow no action inside zone
+    if zones[1]:
+        self._in_zone_steps += 1
+    else:
+        self._in_zone_steps = 0
+
+    # not terminal, must be avoided
+    penalization = self.__compute_penalization(info, zones)
+    if penalization < 0:
+        reward += penalization
+
+    # terminal states
+    discount = self.__is_final_state(info, zones)
+    if discount < 0:
+        self._end = True
+        reward += discount
 
     return reward
 ```
@@ -220,14 +221,12 @@ This environment is an interface for the Webots simulation software version [R20
 
 ```
 export WEBOTS_HOME=/path/to/webots
-export LD_LIBRARY_PATH=$WEBOTS_HOME/lib/controller
 ```
 
 In order to check:
 
 ```
 echo $WEBOTS_HOME # must show /path/to/webots
-echo $LD_LIBRARY_PATH # must show /path/to/webots/lib/controller
 ```
 
 Finally you can execute your code that implement this environment as

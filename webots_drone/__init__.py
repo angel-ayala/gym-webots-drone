@@ -8,7 +8,7 @@ from .webots_simulation import WebotsSimulation
 
 
 __all__ = ['WebotsSimulation']
-__version__ = "0.1.0"
+__version__ = "1.8.0"
 __author__ = 'Angel Ayala'
 
 

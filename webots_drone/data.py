@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import re
+
 from webots_drone.envs.preprocessor import info2state
 from webots_drone.envs.drone_discrete import DroneEnvDiscrete
 from webots_drone.utils import compute_risk_distance
@@ -184,8 +185,9 @@ class StoreStepData:
         row.append(info['timestamp'])  # action
         row.extend(self.last_state)  # state
         # action
-        if type(sample[1]) == list:
-            row.extend(sample[1])
+        if type(sample[1]) is list:
+            action_str = ','.join(map(str, sample[1]))
+            row.append(f'"[{action_str}]"')
         else:
             row.append(sample[1])
         row.append(sample[2])  # reward
@@ -230,25 +232,61 @@ class ExperimentData:
         self.agent_params = read_args(self.experiment_path / agent_args)
         # append evaluation results
         self.join_eval_data()
+        self.quadrants = self.get_target_quadrants()
+        self.set_quadrants()
 
     def join_eval_data(self, csv_regex=r'history_eval_*.csv'):
         csv_paths = list(self.experiment_path.rglob(csv_regex))
         csv_paths.sort()
         eval_df = None
+        if len(csv_paths) > 0:
+            print(f"Loading {len(csv_paths)} evaluation data files")
         for csv_path in csv_paths:
-            print('Loading evaluation data from:', csv_path)
             ep_df = pd.read_csv(csv_path)
             if eval_df is None:
                 eval_df = ep_df.copy()
             else:
                 eval_df = pd.concat((eval_df, ep_df))
+        # print('eval_df', eval_df['phase'].describe())
         if eval_df is not None:
+            # print('appending eval')
             self.history_df = pd.concat((self.history_df, eval_df))
+            self.history_df = self.history_df.reset_index(drop=True)
 
-    def get_reward_curve(self, phase='eval'):
+    def get_reward_curve(self, phase='eval', by_quadrant=False):
         phase_df = self.history_df[self.history_df['phase'] == phase]
-        reward_values = phase_df.groupby('ep').agg({'reward': 'sum'})
-        return reward_values.to_numpy().flatten()
+        if by_quadrant:
+            if 'target_quadrant' not in self.history_df.columns:
+                self.set_quadrants()
+            reward_df = phase_df.groupby(['target_quadrant', 'ep']
+                                         ).agg({'reward': ['sum', 'last']})
+
+            # Flatten the MultiIndex columns
+            reward_df.columns = ['sum', 'last']
+
+            # Ensure unique values
+            unique_quadrants = phase_df['target_quadrant'].unique()
+            unique_eps = phase_df['ep'].unique()
+
+            # Create index mappings
+            quadrant_index = {q: i for i, q in enumerate(unique_quadrants)}
+            ep_index = {e: i for i, e in enumerate(unique_eps)}
+
+            # Initialize the NumPy array
+            shape = (len(unique_quadrants), len(unique_eps), 2)
+            reward_values = np.zeros(shape)
+
+            # Populate the NumPy array
+            for (quadrant, ep), row in reward_df.iterrows():
+                q_idx = quadrant_index[quadrant]
+                e_idx = ep_index[ep]
+                reward_values[q_idx, e_idx, 0] = row['sum']
+                reward_values[q_idx, e_idx, 1] = row['last']
+        else:
+            reward_values = phase_df.groupby('ep').agg(
+                {'reward': ['sum', 'last']}).to_numpy()
+
+        return reward_values
 
     def get_flight_area(self, world_name='forest_tower_200x200_simple'):
         import webots_drone
@@ -262,7 +300,6 @@ class ExperimentData:
             world_file)
         area_size_str = area_size_regex.group().strip()
         area_size = list(map(float, area_size_str.split(' ')[-2:]))
-        # print('area_size', area_size)
 
         area_size = [fs / 2 for fs in area_size]  # size from center
         flight_area = [[fs * -1 for fs in area_size], area_size]
@@ -273,7 +310,42 @@ class ExperimentData:
 
         return flight_area
 
+    def get_target_quadrants(self):
+        flight_area = self.get_flight_area()
+        quadrants = np.array(
+            [(flight_area[0][0], flight_area[1][1]),
+             (flight_area[1][0], flight_area[1][1]),
+             (flight_area[1][0], flight_area[0][1]),
+             (flight_area[0][0], flight_area[0][1])])
+        quadrants /= 2.
+        return quadrants
+
+    def target_pos2quadrant(self, target_pos):
+        target_pos = np.asarray(target_pos)
+        return (self.quadrants == target_pos[:2]).sum(axis=1).argmax()
+
+    def set_quadrants(self):
+        target_quadrant = self.history_df.groupby(
+            ['target_pos_x', 'target_pos_y', 'target_pos_z']).agg({'unique'})
+        # target_quadrant = a_df.groupby(
+        #     ['target_pos_x', 'target_pos_y', 'target_pos_z']).agg({'unique'})
+        self.history_df['target_quadrant'] = -1
+        for i, tpos in enumerate(target_quadrant.index.to_numpy()):
+            df_query = (f"target_pos_x=={tpos[0]} &" +
+                        f" target_pos_y=={tpos[1]} &" +
+                        f" target_pos_z=={tpos[2]}")
+            quadrant_df = self.history_df.query(df_query)
+            self.history_df.loc[
+                quadrant_df.index, "target_quadrant"] = self.target_pos2quadrant(tpos)
+
     def get_tuple_control(self, filtered_df):
+        def orientation_correction(angle):
+            """Apply UAV sensor offset."""
+            angle += np.pi / 2.
+            if angle > 2 * np.pi:
+                angle -= 2 * np.pi
+            return angle
+
         state_cols = ['pos_x', 'pos_y', 'pos_z',
                       'ori_x', 'ori_y', 'ori_z',
                       'vel_x', 'vel_y', 'vel_z',
@@ -281,6 +353,11 @@ class ExperimentData:
                       'north_rad']
         action_col = 'action'
         next_state_cols = ['next_' + sc for sc in state_cols]
+
+        filtered_df.loc[:, 'north_rad'] = filtered_df['north_rad'].map(
+            orientation_correction).copy()
+        filtered_df.loc[:, 'next_north_rad'] = filtered_df['next_north_rad'].map(
+            orientation_correction).copy()
         state_data = filtered_df[state_cols].to_numpy()
         next_state_data = filtered_df[next_state_cols].to_numpy()
         actions_data = np.zeros((len(filtered_df), 4))
@@ -353,6 +430,9 @@ class ExperimentData:
             trj['target_pos'] = trj_df[
                 ['target_pos_x', 'target_pos_y', 'target_pos_z']
                 ].head(1).to_numpy()[0]
+            trj['target_quadrant'] = trj_df['target_quadrant'].head(1).to_numpy()[0]
+            # trj['target_quadrant'] = self.target_pos2quadrant(
+            #     trj['target_pos'])
             trj['states'] = s
             trj['actions'] = a
             trj['next_states'] = s_t1
@@ -361,14 +441,113 @@ class ExperimentData:
             trajectories.append(trj)
         return trajectories
 
-    def iter_trajectory(self, trajectory):
-        state, action, next_state = trajectory
-        x_t = None
-        u_t = None
-        for step in range(len(state)):
-            x_t = state[step] if step == 0 else state[step] - next_state[step]
-            u_t = action[step].copy()
-            yield x_t, u_t
+    def get_episodes_info(self, phases=['learn', 'eval']):
+        ep_info = dict()
+        for ph in phases:
+            phase_info = dict()
+            try:
+                episodes = self.get_phase_eps(ph)
+                tries = [len(self.get_ep_trajectories(e, ph))
+                         for e in episodes]
+                rewards = self.get_reward_curve(ph)
+            except AssertionError:
+                episodes = list()
+                tries = list()
+                rewards = list()
+            finally:
+                phase_info['eps'] = episodes
+                phase_info['tries'] = tries
+                phase_info['rewards'] = rewards
+                ep_info[ph] = phase_info
+        return ep_info
+
+    def get_info(self):
+        state_data = list()
+        if self.env_params['is_pixels']:
+            state_data.append('RGB')
+        if self.env_params['is_vector']:
+            state_data.extend(self.env_params['uav_data'])
+        for extra_key in ['target_pos', 'target_dist', 'target_dim',
+                          'action2obs']:
+            if self.env_params[extra_key]:
+                state_data.append(extra_key)
+        if self.env_params['is_multimodal']:
+            env_mode = 'multimodal'
+        elif self.env_params['is_pixels']:
+            env_mode = 'pixel-based'
+        elif self.env_params['is_vector']:
+            env_mode = 'vector-based'
+
+        exp_info = dict(
+            data_path=self.experiment_path,
+            mode=env_mode,
+            is_srl=self.agent_params['is_srl'],
+            fix_target_pos=self.env_params['fire_pos'] is not None,
+            state_data=state_data,
+            seed=self.train_params['seed']
+            # epsilon=(self.agent_params["epsilon_start"],
+            #          self.agent_params["epsilon_end"],
+            #          self.agent_params["epsilon_steps"],)
+            )
+
+        phases_info = self.get_episodes_info()
+        for k, v in phases_info.items():
+            exp_info[k + '_eps'] = len(v['eps'])
+            exp_info[k + '_tries'] = sum(v['tries'])
+            exp_info[k + '_rewards'] = sum(v['rewards'])
+
+        return exp_info
+
+    def compute_ep_nav_metrics(self, ep, phase='eval'):
+        ep_trajectories = self.get_ep_trajectories(ep, phase)
+        trj_summ = np.zeros((len(ep_trajectories), 4))
+        for i, trj_data in enumerate(ep_trajectories):
+            trj_summ[i, 0] = trj_data['success']
+            trj_summ[i, 1] = trj_data['length']
+            short_dist = np.linalg.norm(
+                trj_data['target_pos'] - trj_data['initial_pos'])
+            trj_summ[i, 2] = short_dist - self.get_goal_distance()
+            trj_summ[i, 3] = trj_data['target_dists'][-1] -\
+                self.get_goal_distance()
+
+        # Success Rate (SR)
+        sr = trj_summ[:, 0].mean()
+        # Success Path Length (SPL)
+        max_short_path = trj_summ[:, 2] > trj_summ[:, 1]
+        trj_summ[max_short_path, 1] = trj_summ[max_short_path, 2]
+        spl = (trj_summ[:, 0] * (trj_summ[:, 2] / trj_summ[:, 1])).mean()
+        # Soft SPL
+        soft_spl = (trj_summ[:, 2] / trj_summ[:, 1]).mean()
+        # Distance to Success (DTS)
+        dts = trj_summ[:, 3].mean()
+        return dict(tries=len(ep_trajectories), SR=sr, SPL=spl, SSPL=soft_spl,
+                    DTS=dts)
+
+    def get_nav_metrics(self, phase='eval'):
+        episodes = self.get_phase_eps(phase)
+        metrics = list()
+        for ep in episodes:
+            metrics.append(self.compute_ep_nav_metrics(ep, phase))
+        return metrics
+
+    def get_epsilon_curve(self):
+        epsilon=(self.agent_params["epsilon_start"],
+                 self.agent_params["epsilon_end"],
+                 self.agent_params["epsilon_steps"],)
+        diff = epsilon[1] - epsilon[0]
+        diff /= self.agent_params["epsilon_steps"]
+        eps_values = np.linspace(*epsilon)
+        return eps_values
+
+    def get_mem_beta_curve(self):
+        mem_beta=(self.agent_params["memory_buffer"]["beta"],
+                  1.,
+                  self.agent_params["memory_buffer"]["beta_steps"],)
+        diff = mem_beta[1] - mem_beta[0]
+        diff /= self.agent_params["epsilon_steps"]
+        beta_values = np.linspace(*mem_beta)
+        return beta_values
+
 
 
 class VideoCallback:
