@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import re
+import time
 
 from webots_drone.envs.preprocessor import info2state
 from webots_drone.envs.drone_discrete import DroneEnvDiscrete
@@ -551,39 +552,46 @@ class ExperimentData:
 
 
 class VideoCallback:
-    def __init__(self, store_path, mdp):
+    def __init__(self, store_path, mdp, video_speed=1):
         self.store_path = Path(store_path)
         self.store_path.mkdir(parents=True, exist_ok=True)
         self.env_sim = mdp.env.sim
         self._recording = False
         self._iteration = 0
+        self.video_speed = video_speed
 
-    def _start_recording(self):
-        self.vid_path = self.store_path / f"iteration_{self._iteration:03d}.mp4"
-        if self.vid_path.is_file():
-            print('WARNING:', self.vid_path, 'already exists, overwriting!')
-        if self.env_sim.movieIsReady():
-            self.env_sim.movieStartRecording(str(self.vid_path.absolute()),
-                                             width=848, height=480,
-                                             quality=100, codec=0,
-                                             acceleration=5, caption=True)
-            if self.env_sim.movieFailed():
-                print('Error on recording movie...')
-            else:
-                self._recording = True
+    @property
+    def is_ready(self):
+        return self.env_sim.movieIsReady()
+
+    def start_recording(self, vid_path):
+        if vid_path.is_file():
+            print('WARNING:', vid_path, 'already exists, overwriting!')
+
+        while not self.is_ready:
+            print('Previous encoder is still running....')
+            time.sleep(.5)
+
+        self.env_sim.movieStartRecording(str(vid_path.absolute()),
+                                         width=848, height=480,
+                                         quality=100, codec=0,
+                                         acceleration=self.video_speed, caption=True)
+        if self.env_sim.movieFailed():
+            print('Error on recording movie...')
         else:
-            print('Record not started, previous encoding still running.')
+            self._recording = True
 
-    def _stop_recording(self):
+    def stop_recording(self):
         self.env_sim.movieStopRecording()
         self._recording = False
 
     def __call__(self, sample, info):
         if not self._recording:
-            self._start_recording()
+            vid_path = self.store_path / f"iteration_{self._iteration:03d}.mp4"
+            self.start_recording(vid_path)
         if sample[4] or sample[5]:
             self._iteration += 1
-            self._stop_recording()
+            self.stop_recording()
 
 
 if __name__ == '__main__':
