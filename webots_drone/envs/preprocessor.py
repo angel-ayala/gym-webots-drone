@@ -228,8 +228,7 @@ class CustomVectorObservation(gym.Wrapper):
             obs_high_limits.extend([1. for _ in range(9)])
             obs_low_limits.extend([0. for _ in range(9)])
 
-        obs_shape = np.asarray(self.env.observation_space.shape)
-        obs_shape[-1] = obs_elems
+        obs_shape = (obs_elems, )
         self.observation_space = spaces.Box(low=np.asarray(obs_low_limits),
                                             high=np.asarray(obs_high_limits),
                                             shape=obs_shape, dtype=np.float32)
@@ -263,7 +262,7 @@ class CustomVectorObservation(gym.Wrapper):
         # append sensors at the end
         if 'dist_sensors' in self.uav_data:
             new_obs.extend(obs[13:])
-        # print('new_obs', len(new_obs), new_obs)
+
         return np.array(new_obs)
 
     def step(self, action):
@@ -298,12 +297,13 @@ class ReducedActionSpace(gym.Wrapper):
 class MultiModalObservation(gym.Wrapper):
     def __init__(self, env: gym.Env, uav_data=[
             'imu', 'gyro', 'gps', 'gps_vel', 'north', 'dist_sensors'],
-            frame_stack=1, target_pos=False, target_dim=False,
-            target_dist=False, add_action=False):
+            frame_stack=1, target_dist=False, target_pos=False,
+            target_dim=False, add_action=False):
         super().__init__(env)
         self.rgb_obs = env.observation_space
         self.env_vector = CustomVectorObservation(
-            env, uav_data, target_pos, target_dim, target_dist, add_action)
+            env, uav_data=uav_data, target_dist=target_dist,
+            target_pos=target_pos, target_dim=target_dim, add_action=add_action)
         self.frame_stack = frame_stack
         self.vector_observation = self.env_vector.observation
 
