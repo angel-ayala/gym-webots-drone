@@ -231,7 +231,71 @@ def check_target_distance(distance, distance_target, distance_margin=5.):
     out_zone = area_limits[1] <= distance
     return in_risk, in_zone, out_zone
 
+
 def check_same_position(pisition1, position2, thr=0.003):
     dist_diff = compute_distance(pisition1, position2)
     dist_diff *= np.abs(dist_diff).round(3) > 0.003
     return dist_diff == 0.
+
+
+def constrained_action(action, position, north_rad, flight_area):
+    """Check drone position and orientation to keep it inside flight_area."""
+    roll_angle, pitch_angle, yaw_angle, altitude = action
+
+    # check area limits
+    out_area = check_flight_area(position, flight_area)
+
+    # essential flags
+    is_north = np.pi / 2. > north_rad > -np.pi / 2.  # north
+    is_east = north_rad < 0
+    orientation = [is_north,        # north
+                   not is_north,    # south
+                   is_east,         # east
+                   not is_east]     # west
+    movement = [pitch_angle > 0.,  # north - forward
+                pitch_angle < 0.,  # south - backward
+                roll_angle > 0.,   # east - right
+                roll_angle < 0.]   # west - left
+
+    # constraint action values
+    if out_area[0]:
+        if ((orientation[0] and movement[0])
+                or (orientation[1] and movement[1])):  # N,S
+            pitch_angle = 0.
+
+        if ((orientation[2] and movement[3])
+                or (orientation[3] and movement[2])):  # E,W
+            roll_angle = 0.
+
+    if out_area[1]:
+        if ((orientation[0] and movement[1])
+                or (orientation[1] and movement[0])):  # N,S
+            pitch_angle = 0.
+
+        if ((orientation[2] and movement[2])
+                or (orientation[3] and movement[3])):  # E,W
+            roll_angle = 0.
+
+    if out_area[2]:
+        if ((orientation[0] and movement[2])
+                or (orientation[1] and movement[3])):  # N,S
+            roll_angle = 0.
+
+        if ((orientation[2] and movement[0])
+                or (orientation[3] and movement[1])):  # E,W
+            pitch_angle = 0.
+
+    if out_area[3]:
+        if ((orientation[0] and movement[3])
+                or (orientation[1] and movement[2])):  # N,S
+            roll_angle = 0.
+
+        if ((orientation[2] and movement[1])
+                or (orientation[3] and movement[0])):  # E,W
+            pitch_angle = 0.
+
+    if ((out_area[4] and altitude > 0)  # ascense
+            or (out_area[5] and altitude < 0)):  # descense
+        altitude = 0.
+
+    return roll_angle, pitch_angle, yaw_angle, altitude

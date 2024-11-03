@@ -48,18 +48,17 @@ class DroneEnvDiscrete(DroneEnvContinuous):
             zone_steps=zone_steps)
 
         # Action space discretized, roll, pitch, and yaw only
-        control_limits = WebotsSimulation.get_control_ranges()
+        control_limits = self.action_limits.copy()
         self._limits = np.hstack((control_limits[1, :3],
                                   control_limits[0, :3][::-1]))
         # add 1 for no action
         self.action_space = spaces.Discrete(n=self._limits.shape[-1] + 1)
 
-    @staticmethod
-    def discrete2continuous(action):
+    def discrete2continuous(self, action):
         if action == 0:  # no action
-            return WebotsSimulation.get_control_ranges()[1] * 0.
+            return self.action_limits[1] * 0.
         else:
-            limits = WebotsSimulation.get_control_ranges()[:, :3]
+            limits = self.action_limits[:, :3]
             mask = np.eye(limits.shape[-1])
             action_map = [limits[a % 2 - 1] * mask[a // 2]
                           for a in range(np.multiply(*limits.shape))]

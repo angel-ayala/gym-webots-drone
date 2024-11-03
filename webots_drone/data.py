@@ -550,7 +550,6 @@ class ExperimentData:
         return beta_values
 
 
-
 class VideoCallback:
     def __init__(self, store_path, mdp, video_speed=1):
         self.store_path = Path(store_path)

@@ -30,7 +30,8 @@ def velocity2reward(velocity, pos_thr=0.003):
 
 
 def compute_vector_reward(ref_position, pos_t, pos_t1, orientation_t1,
-                          distance_target=36., distance_margin=5.):
+                          distance_target=36., distance_margin=5.,
+                          vel_factor=0.035):
     # compute orientation reward
     ref_orientation = compute_target_orientation(pos_t1, ref_position)
     r_orientation = orientation2reward(orientation_t1, ref_orientation)
@@ -49,7 +50,7 @@ def compute_vector_reward(ref_position, pos_t, pos_t1, orientation_t1,
     r_bonus = 0.
     if zones[1]:
         r_bonus = 3.
-        r_velocity = compute_distance(pos_t1, pos_t) / 0.035
+        r_velocity = compute_distance(pos_t1, pos_t) / vel_factor
     # penalty no movement
     elif check_same_position(pos_t, pos_t1):
         r_bonus -= 2.

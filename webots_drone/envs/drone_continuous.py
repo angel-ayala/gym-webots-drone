@@ -12,6 +12,9 @@ from gym import spaces, logger
 from gym.utils import seeding
 
 from webots_drone import WebotsSimulation
+from webots_drone.reward import compute_vector_reward
+from webots_drone.reward import compute_visual_reward
+from webots_drone.target import VirtualTarget
 from webots_drone.utils import check_collision
 from webots_drone.utils import check_flight_area
 from webots_drone.utils import check_flipped
@@ -19,15 +22,13 @@ from webots_drone.utils import check_near_object
 from webots_drone.utils import min_max_norm
 from webots_drone.utils import check_same_position
 from webots_drone.utils import check_target_distance
-from webots_drone.reward import compute_vector_reward
-from webots_drone.reward import compute_visual_reward
+from webots_drone.utils import constrained_action
 
 from .preprocessor import seconds2steps
 from .preprocessor import info2image
 from .preprocessor import normalize_pixels
 from .preprocessor import info2obs_1d
 from .preprocessor import normalize_vector
-
 
 
 class DroneEnvContinuous(gym.Env):
@@ -48,11 +49,8 @@ class DroneEnvContinuous(gym.Env):
                  fire_dim=[7., 3.5],
                  is_pixels=True,
                  zone_steps=0):
-        # Simulation controller
-        logger.info('Checking Webots connection...')
-        self.sim = WebotsSimulation()
-        logger.info('Connected to Webots')
 
+        self.init_sim()
         # Action space, the angles and altitud
         self.action_space = spaces.Box(low=self.action_limits[0],
                                        high=self.action_limits[1],
@@ -81,34 +79,51 @@ class DroneEnvContinuous(gym.Env):
                                                 self.sim.timestep)
         self._max_no_action_steps = seconds2steps(
             max_no_action_seconds, frame_skip, self.sim.timestep)
-        self._frame_skip = frame_skip
-        self._frame_inter = [frame_skip - 5., frame_skip + 5.]
+        self.set_reaction_intervals(frame_skip)
+
         self._goal_threshold = goal_threshold
         self._fire_pos = fire_pos
         self._fire_dim = fire_dim
-        self.flight_area = np.array(self.sim.get_flight_area(altitude_limits))
         self.init_altitude = init_altitude
         self.viewer = None
+        # flight_area and target discrete position
+        self.flight_area = np.array(self.sim.get_flight_area(altitude_limits))
+        self.sample_quadrants = list()
+        self.set_quadrants()
+
+        # self.reward_limits = [-2. - (2.21 * self._frame_inter[0]),
+        #                       3.21 * self._frame_inter[1]]
+        self.zone_steps = zone_steps if zone_steps > 0 else float('inf')
+
+        # virtualTarget
+        self.vtarget = VirtualTarget(webots_node=self.sim.target_node)
+
+    def init_sim(self):
+        # Simulation controller
+        logger.info('Checking Webots connection...')
+        self.sim = WebotsSimulation()
+        logger.info('Connected to Webots')
+
+    def set_quadrants(self):
         self.quadrants = np.array(
             [(self.flight_area[0][0], self.flight_area[1][1]),
              (self.flight_area[1][0], self.flight_area[1][1]),
              (self.flight_area[1][0], self.flight_area[0][1]),
              (self.flight_area[0][0], self.flight_area[0][1])])
         self.quadrants /= 2.
-        self.sample_quadrants = list()
-        self.reward_limits = [-2. - (2.21 * self._frame_inter[0]),
-                              3.21 * self._frame_inter[1]]
-        self.zone_steps = zone_steps if zone_steps > 0 else float('inf')
+
+    def set_reaction_intervals(self, frame_skip):
+        self._frame_inter = [frame_skip - 5., frame_skip + 5.]
 
     @property
     def action_limits(self):
-        return WebotsSimulation.get_control_ranges()
+        return self.sim.get_control_ranges()
 
-    def norm_reward(self, reward):
-        reward = min_max_norm(reward - 1e-8,  # avoids zero values
-                              -1., 2., self.reward_limits[0],
-                              self.reward_limits[1])
-        return reward
+    # def norm_reward(self, reward):
+    #     reward = min_max_norm(reward - 1e-8,  # avoids zero values
+    #                           -1., 2., self.reward_limits[0],
+    #                           self.reward_limits[1])
+    #     return reward
 
 
     def init_runtime_vars(self):
@@ -129,15 +144,31 @@ class DroneEnvContinuous(gym.Env):
         # seed2 = seeding.hash_seed(seed1 + 1) % 2**31
         seed2 = (seed1 + 1) % 2**31
         self.sim.seed(seed2)
+        self.vtarget.seed(seed)
         return [seed1, seed2]
 
     def set_fire_position(self, position, noise_prob=0.):
         offset = 0
         if self.np_random.random() < noise_prob:
             offset = self.np_random.random()
+        fire_pos = position + offset
         logger.info(f"Starting fire in position {position} with offset = {offset}.")
-        self.sim.set_fire(position + offset, *self._fire_dim,
-                          dist_threshold=self._goal_threshold * 1.5)
+        self.vtarget.set_dimension(*self._fire_dim)
+        new_fire_pos = self.vtarget.set_position(self.flight_area, fire_pos)
+
+        # avoid to the fire appears near the drone's initial position
+        must_do = 0
+        dist_threshold = self._goal_threshold * 1.5
+        directions = [(-1, 1), (1, 1),
+                      (1, -1), (-1, -1)]
+        while (self.vtarget.get_distance(self.last_info['position'])
+               <= self.vtarget.get_risk_distance(dist_threshold)):
+            # randomize position offset
+            offset = self.np_random.uniform(0.1, 1.)
+            new_fire_pos[0] += offset * directions[must_do % 4][0]
+            new_fire_pos[1] += offset * directions[must_do % 4][1]
+            must_do += 1
+            self.set_fire_position(new_fire_pos)
 
     def set_fire_quadrant(self, quadrant=None, noise_prob=0.):
         if quadrant is None:
@@ -165,6 +196,8 @@ class DroneEnvContinuous(gym.Env):
     def get_state(self):
         """Process the environment to get a state."""
         state_data = self.sim.get_data()
+        state_data['target_position'] = self.vtarget.position
+        state_data['target_dim'] = self.vtarget.dimension
 
         if self.is_pixels:
             state = self.get_observation_2d(state_data)
@@ -173,12 +206,9 @@ class DroneEnvContinuous(gym.Env):
 
         return state, state_data
 
-    def compute_risk_dist(self, threshold=0.):
-        return self.sim.get_risk_distance(threshold)
-
     @property
     def distance_target(self):
-        return self.sim.get_risk_distance(self._goal_threshold / 2.)
+        return self.vtarget.get_risk_distance(self._goal_threshold / 2.)
 
     def __no_action_limit(self, position):
         if len(self.last_info.keys()) == 0:
@@ -243,7 +273,7 @@ class DroneEnvContinuous(gym.Env):
 
         return penalization
 
-    def compute_reward(self, obs, info):
+    def compute_reward(self, obs, info, is_3d=False, vel_factor=0.035):
         """Compute the distance-based reward.
 
         Compute the distance between drone and fire.
@@ -257,25 +287,29 @@ class DroneEnvContinuous(gym.Env):
         info['penalization'] = 'no'
         info['final'] = 'no'
 
-        # 2 dimension considered
+        # capture essential info
         if len(self.last_info.keys()) == 0:
-            uav_pos_t = info['position'][:2]  # pos_t
+            uav_pos_t = info['position']  # pos_t
         else:
-            uav_pos_t = self.last_info['position'][:2]  # pos_t
-        uav_pos_t1 = info['position'][:2]  # pos_t+1
+            uav_pos_t = self.last_info['position']  # pos_t
+        uav_pos_t1 = info['position']  # pos_t+1
         uav_ori_t1 = info['north_rad']  # orientation_t+1
-        target_xy = self.sim.get_target_pos()[:2]
+        target_xy = self.vtarget.position
+
+        # 2 dimension considered
+        if not is_3d:
+            uav_pos_t[2] = uav_pos_t1[2] = target_xy[2]
 
         # compute reward components
         reward = compute_vector_reward(
             target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
             distance_target=self.distance_target,
-            distance_margin=self._goal_threshold)
+            distance_margin=self._goal_threshold, vel_factor=vel_factor)
 
         # if self.is_pixels:
         #     reward += compute_visual_reward(obs)
-
-        zones = check_target_distance(self.sim.get_target_distance(),
+        distance2target = self.vtarget.get_distance(info['position'])
+        zones = check_target_distance(distance2target,
                                       self.distance_target,
                                       self._goal_threshold)
         # allow no action inside zone
@@ -304,20 +338,21 @@ class DroneEnvContinuous(gym.Env):
 
     def perform_action(self, action):
         # perform constrained action
-        constrained_action = self.sim.clip_action(action, self.flight_area)
-        command = dict(disturbances=constrained_action)
-        self.sim.send_data(command)
+        info = self.last_info
+        c_action = constrained_action(action, info['position'],
+                                      info['north_rad'], self.flight_area)
+        self.sim.send_action(c_action)
         # read new state
         return self.get_state()
 
-    def lift_uav(self, altitude):
+    def lift_uav(self):
         diff_altitude = float('inf')
         lift_action = [0., 0., 0., self.sim.limits[1][3]]
         logger.info("Lifting the drone...")
         # wait for lift momentum
         while diff_altitude > 13.:
             _, info = self.perform_action(lift_action)
-            diff_altitude = altitude - info['position'][2]  # Z axis diff
+            diff_altitude = self.init_altitude - info['position'][2]  # Z axis diff
         # change vertical position
         tpos = info['position']
         tpos[2] = self.init_altitude - 0.1
@@ -325,7 +360,7 @@ class DroneEnvContinuous(gym.Env):
         # wait for altitude
         while diff_altitude > 0:
             _, info = self.perform_action(lift_action)
-            diff_altitude = altitude - info['position'][2]  # Z axis diff
+            diff_altitude = self.init_altitude - info['position'][2]  # Z axis diff
         logger.info("Drone lifted")
 
         self.perform_action([0., 0., 0., 0.])  # no action
@@ -335,11 +370,12 @@ class DroneEnvContinuous(gym.Env):
         # restart simulation
         self.seed(seed)
         self.sim.reset()
-        fquadrant = self._fire_pos if fire_quadrant is None else fire_quadrant
-        self.set_fire_quadrant(fquadrant)
         self.sim.play_fast()
         self.sim.sync()
-        self.lift_uav(self.init_altitude)
+        self.last_state, self.last_info = self.get_state()
+        fquadrant = self._fire_pos if fire_quadrant is None else fire_quadrant
+        self.set_fire_quadrant(fquadrant)
+        self.lift_uav()
         self.init_runtime_vars()
         self.last_state, self.last_info = self.get_state()
 

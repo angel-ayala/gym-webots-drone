@@ -8,11 +8,11 @@ PROTO RadioController [
   field SFVec3f    translation         0 0 0                               # Is `Transform.translation`.
   field SFRotation rotation            0 0 1 0                             # Is `Transform.rotation`.
   field SFString   name                "RCControl"                         # Is `Solid.name`.
-  field SFString   controller          ""                                  # Is `Robot.controller`.
+  field SFString   controller          "<extern>"                          # Is `Robot.controller`.
   field MFString   controllerArgs      []                                  # Is `Robot.controllerArgs`.
   field SFString   window              "<generic>"                         # Is `Robot.window`.
   field SFString   customData          ""                                  # Is `Robot.customData`.
-  field SFBool     supervisor          FALSE                               # Is `Robot.supervisor`.
+  field SFBool     supervisor          TRUE                                # Is `Robot.supervisor`.
   field SFBool     synchronization     TRUE                                # Is `Robot.synchronization`.
   field MFFloat    battery             []                                  # Is `Robot.battery`.
   field MFNode     bodySlot            []                                  # Extends the robot with new nodes in the turret slot.
