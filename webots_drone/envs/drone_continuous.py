@@ -11,15 +11,13 @@ import numpy as np
 from gym import spaces, logger
 from gym.utils import seeding
 
-from webots_drone import WebotsSimulation
 from webots_drone.reward import compute_vector_reward
 from webots_drone.reward import compute_visual_reward
-from webots_drone.target import VirtualTarget
 from webots_drone.utils import check_collision
 from webots_drone.utils import check_flight_area
 from webots_drone.utils import check_flipped
 from webots_drone.utils import check_near_object
-from webots_drone.utils import min_max_norm
+# from webots_drone.utils import min_max_norm
 from webots_drone.utils import check_same_position
 from webots_drone.utils import check_target_distance
 from webots_drone.utils import constrained_action
@@ -87,33 +85,43 @@ class DroneEnvContinuous(gym.Env):
         self.init_altitude = init_altitude
         self.viewer = None
         # flight_area and target discrete position
-        self.flight_area = np.array(self.sim.get_flight_area(altitude_limits))
+        self.flight_area = self.sim.get_flight_area(altitude_limits)
         self.sample_quadrants = list()
-        self.set_quadrants()
+        self.quadrants = self.create_quadrants()
 
         # self.reward_limits = [-2. - (2.21 * self._frame_inter[0]),
         #                       3.21 * self._frame_inter[1]]
         self.zone_steps = zone_steps if zone_steps > 0 else float('inf')
 
         # virtualTarget
-        self.vtarget = VirtualTarget(webots_node=self.sim.target_node)
+        self.vtarget = self.create_target(fire_pos, fire_dim)
 
     def init_sim(self):
+        from webots_drone import WebotsSimulation
         # Simulation controller
         logger.info('Checking Webots connection...')
         self.sim = WebotsSimulation()
         logger.info('Connected to Webots')
 
-    def set_quadrants(self):
-        self.quadrants = np.array(
+    def create_quadrants(self):
+        quadrants = np.array(
             [(self.flight_area[0][0], self.flight_area[1][1]),
              (self.flight_area[1][0], self.flight_area[1][1]),
              (self.flight_area[1][0], self.flight_area[0][1]),
              (self.flight_area[0][0], self.flight_area[0][1])])
-        self.quadrants /= 2.
+        quadrants /= 2.
+        return quadrants
 
     def set_reaction_intervals(self, frame_skip):
         self._frame_inter = [frame_skip - 5., frame_skip + 5.]
+
+    def create_target(self, position=None, dimension=None):
+        # virtualTarget
+        from webots_drone.target import VirtualTarget
+        if type(position) is int:
+            position = self.quadrants[position]
+        return VirtualTarget(position=position, dimension=dimension,
+                             webots_node=self.sim.target_node)
 
     @property
     def action_limits(self):

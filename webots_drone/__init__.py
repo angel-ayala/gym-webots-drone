@@ -4,12 +4,18 @@ webots_drone.
 A gym wrapper for Webots simulations scene with the DJI Mavic Pro 2 and
 Crazyflie drones.
 """
+
+import os
 from gym.envs.registration import register
-from .webots_simulation import WebotsSimulation
-from .cf_simulation import CFSimulation
+
+# Simulated environment requires of Webots' environment variables
+if "WEBOTS_HOME" in os.environ:
+    from .webots_simulation import WebotsSimulation
+    from .cf_simulation import CFSimulation
+
+    __all__ = ['WebotsSimulation', 'CFSimulation']
 
 
-__all__ = ['WebotsSimulation', 'CFSimulation']
 __version__ = "2.0.0"
 __author__ = 'Angel Ayala'
 

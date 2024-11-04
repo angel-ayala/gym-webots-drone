@@ -168,7 +168,9 @@ class CustomVectorObservation(gym.Wrapper):
     def __init__(self, env: gym.Env, uav_data=['imu', 'gyro', 'gps', 'gps_vel',
                                                'north', 'dist_sensors'],
                  target_dist=False, target_pos=False, target_dim=False,
-                 add_action=False):
+                 add_action=False, angles_range=[np.pi, np.pi / 2., np.pi],
+                 avel_range=[np.pi, np.pi / 2., np.pi],
+                 speed_range=[4., 4., 1.]):
         super().__init__(env)
         obs_elems = 0
         obs_high_limits = []
@@ -176,24 +178,24 @@ class CustomVectorObservation(gym.Wrapper):
         self.uav_data = uav_data
         if 'imu' in uav_data:
             obs_elems += 3
-            obs_high_limits.extend([np.pi, np.pi / 2., np.pi])
-            obs_low_limits.extend([-np.pi, -np.pi / 2., -np.pi])
+            obs_high_limits.extend(angles_range)
+            obs_low_limits.extend([-v for v in angles_range])
         if 'gyro' in uav_data:
             obs_elems += 3
-            obs_high_limits.extend([np.pi, np.pi / 2., np.pi])
-            obs_low_limits.extend([-np.pi, -np.pi / 2., -np.pi])
+            obs_high_limits.extend(avel_range)
+            obs_low_limits.extend([-v for v in avel_range])
         if 'gps' in uav_data:
             obs_elems += 3
             obs_high_limits.extend(self.env.flight_area[1])
             obs_low_limits.extend(self.env.flight_area[0])
         if 'gps_vel' in uav_data:
             obs_elems += 3
-            obs_high_limits.extend([4., 4., 1.])
-            obs_low_limits.extend([-4., -4., -1.])
+            obs_high_limits.extend(speed_range)
+            obs_low_limits.extend([-v for v in speed_range])
         if 'north' in uav_data:
             obs_elems += 1
-            obs_high_limits.append(np.pi)
-            obs_low_limits.append(-np.pi)
+            obs_high_limits.append(angles_range[2])
+            obs_low_limits.append(-angles_range[2])
 
         self.target_dist = target_dist
         if target_dist:
@@ -298,12 +300,16 @@ class MultiModalObservation(gym.Wrapper):
     def __init__(self, env: gym.Env, uav_data=[
             'imu', 'gyro', 'gps', 'gps_vel', 'north', 'dist_sensors'],
             frame_stack=1, target_dist=False, target_pos=False,
-            target_dim=False, add_action=False):
+            target_dim=False, add_action=False,
+            angles_range=[np.pi, np.pi / 2., np.pi],
+            avel_range=[np.pi, np.pi / 2., np.pi], speed_range=[4., 4., 1.]):
         super().__init__(env)
         self.rgb_obs = env.observation_space
         self.env_vector = CustomVectorObservation(
             env, uav_data=uav_data, target_dist=target_dist,
-            target_pos=target_pos, target_dim=target_dim, add_action=add_action)
+            target_pos=target_pos, target_dim=target_dim,
+            add_action=add_action, angles_range=angles_range,
+            avel_range=avel_range, speed_range=speed_range)
         self.frame_stack = frame_stack
         self.vector_observation = self.env_vector.observation
 

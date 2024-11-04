@@ -23,10 +23,12 @@ class VirtualTarget:
         if webots_node is not None:
             self.node = webots_node
 
-        if position is None:
-            self.position = []
+        self.position = [0., 0., 0.] if position is None else position
+
         if dimension is None:
-            self.dimension = []
+            self.set_dimension()
+        else:
+            self.set_dimension(*dimension)
 
         self.is_3d = is_3d
 

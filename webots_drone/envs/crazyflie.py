@@ -9,7 +9,6 @@ import numpy as np
 from gym import logger
 from gym import spaces
 
-from webots_drone import CFSimulation
 from webots_drone.envs import DroneEnvContinuous
 
 
@@ -37,10 +36,10 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
             fire_dim=fire_dim,
             is_pixels=is_pixels,
             zone_steps=zone_steps)
-        self.vtarget.is_3d = True
 
     def init_sim(self):
         # Simulation controller
+        from webots_drone import CFSimulation
         logger.info('Checking Webots connection...')
         self.sim = CFSimulation()
         logger.info('Connected to Webots')
@@ -48,7 +47,7 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
     def set_reaction_intervals(self, frame_skip):
         self._frame_inter = [frame_skip - 1, frame_skip + 1]
 
-    def set_quadrants(self):
+    def create_quadrants(self):
         # offset the flight_area
         target_area = self.flight_area.copy()
         # adjust x- y-axis
@@ -58,7 +57,7 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
         target_area[0, 2] += 0.25
         target_area[1, 2] -= 0.45
         # compute quadrants coordinates
-        area = np.linspace(target_area[0, ], target_area[1], 3)
+        area = np.linspace(target_area[0], target_area[1], 3)
         area_points = []
         for z in area[:, 2]:
             for x in area[:, 0]:
@@ -86,10 +85,16 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
                 [np.append(p, z) for p in sorted_level_points])
 
         # Convert back to np.array for easier handling
-        self.quadrants = np.asarray(sorted_area_points)
+        return np.asarray(sorted_area_points)
 
     def compute_reward(self, obs, info, is_3d=True, vel_factor=0.010):
         return super().compute_reward(obs, info, is_3d, vel_factor)
+
+    def create_target(self, position=None, dimension=None):
+        # virtualTarget
+        vtarget = super().create_target(position, dimension)
+        vtarget.is_3d = True
+        return vtarget
 
     def lift_uav(self):
         self.sim.take_off(self.init_altitude)
