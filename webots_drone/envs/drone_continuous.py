@@ -218,10 +218,11 @@ class DroneEnvContinuous(gym.Env):
     def distance_target(self):
         return self.vtarget.get_risk_distance(self._goal_threshold / 2.)
 
-    def __no_action_limit(self, position):
+    def no_action_limit(self, position, pos_thr=0.003):
         if len(self.last_info.keys()) == 0:
             return False
-        if check_same_position(position, self.last_info['position'], thr=0.003):
+        if check_same_position(position, self.last_info['position'],
+                               thr=pos_thr):
             self._no_action_steps += 1
         else:
             self._no_action_steps = 0
@@ -230,7 +231,7 @@ class DroneEnvContinuous(gym.Env):
     def __is_final_state(self, info, zones):
         discount = 0
         # no action limit
-        if self.__no_action_limit(info["position"]) and not zones[1]:
+        if self.no_action_limit(info["position"]) and not zones[1]:
             logger.info(f"[{info['timestamp']}] Final state, Same position")
             discount -= 2.
             info['final'] = 'No Action'
@@ -281,7 +282,8 @@ class DroneEnvContinuous(gym.Env):
 
         return penalization
 
-    def compute_reward(self, obs, info, is_3d=False, vel_factor=0.035):
+    def compute_reward(self, obs, info, is_3d=False, vel_factor=0.035,
+                       pos_thr=0.003):
         """Compute the distance-based reward.
 
         Compute the distance between drone and fire.
@@ -312,7 +314,8 @@ class DroneEnvContinuous(gym.Env):
         reward = compute_vector_reward(
             target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
             distance_target=self.distance_target,
-            distance_margin=self._goal_threshold, vel_factor=vel_factor)
+            distance_margin=self._goal_threshold,
+            vel_factor=vel_factor, pos_thr=pos_thr)
 
         # if self.is_pixels:
         #     reward += compute_visual_reward(obs)

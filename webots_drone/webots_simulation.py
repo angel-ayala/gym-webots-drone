@@ -330,7 +330,7 @@ def run(controller, show=True, **kwargs):
     from webots_drone.reward import compute_vector_reward
     from webots_drone.utils import constrained_action
     from webots_drone.target import VirtualTarget
-    # from webots_drone.utils import compute_target_orientation
+    from webots_drone.utils import compute_target_orientation
     # from webots_drone.envs.preprocessor import info2image
     # from webots_drone.reward import compute_visual_reward
 
@@ -347,14 +347,15 @@ def run(controller, show=True, **kwargs):
     frame_skip = kwargs['frame_skip']
     is_3d = kwargs['is_3d']
     reward_vel_factor = kwargs['vel_factor']
+    reward_pos_thr = kwargs['pos_thr']
 
     controller.seed()
     flight_area = controller.get_flight_area(altitude_limits)
 
     # target
-    vtarget = VirtualTarget(webots_node=controller.target_node, is_3d=is_3d)
+    vtarget = VirtualTarget(dimension=fire_dim,
+                            webots_node=controller.target_node, is_3d=is_3d)
     vtarget.set_position(flight_area, fire_pos)
-    vtarget.set_dimension(*fire_dim)
 
     controller.play()
     controller.sync()
@@ -376,28 +377,30 @@ def run(controller, show=True, **kwargs):
         uav_pos_t1 = next_state['position']   # pos_t+1
         uav_ori_t1 = next_state['north_rad']  # orientation
         target_xy = vtarget.position
-        # target_ori = compute_target_orientation(uav_pos_t1, target_xy)
+        target_ori = compute_target_orientation(uav_pos_t1, target_xy)
         if not is_3d:
             uav_pos_t[2] = uav_pos_t1[2] = target_xy[2]
 
         # compute reward components
         curr_distance = compute_distance(target_xy, uav_pos_t)
         next_distance = compute_distance(target_xy, uav_pos_t1)
-        distance_diff = np.round(curr_distance - next_distance, 3)
-        distance_diff *= np.abs(distance_diff) > 0.003
+        distance_diff = np.round(curr_distance - next_distance, 4)
+        distance_diff *= np.abs(distance_diff) > reward_pos_thr
+
         reward = compute_vector_reward(
             target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
             distance_target=vtarget.get_risk_distance(goal_threshold / 2.),
-            distance_margin=goal_threshold,
-            vel_factor=reward_vel_factor)
+            distance_margin=goal_threshold, vel_factor=reward_vel_factor,
+            pos_thr=reward_pos_thr)
 
         # observation = info2image(next_state, output_size=84)
         # reward += compute_visual_reward(observation)
         accum_reward += reward
         if step % frame_skip == 0:
-            print(f"pos_t: {uav_pos_t[0]:.3f} {uav_pos_t[1]:.3f}"\
-                  f" - post_t+1: {uav_pos_t1[0]:.3f} {uav_pos_t1[1]:.3f} (N:{uav_ori_t1:.3f})"\
-                  f" -> reward ({reward:.4f}) {accum_reward:.4f}"\
+            print(f"pos_t: {uav_pos_t[0]:.3f} {uav_pos_t[1]:.3f}"
+                  f" - post_t+1: {uav_pos_t1[0]:.3f} {uav_pos_t1[1]:.3f}"
+                  f" (N:{uav_ori_t1:.3f}/{target_ori:.3f})"
+                  f" -> reward ({reward:.4f}) {accum_reward:.4f}"
                   f" diff: {distance_diff:.4f} ({curr_distance:.4f}/{vtarget.get_risk_distance(goal_threshold/2.):.4f})")
             accum_reward = 0
 
@@ -431,6 +434,7 @@ if __name__ == '__main__':
         'height_limits': [11., 75.],
         'frame_skip': 25,
         'vel_factor': 0.035,
+        'pos_thr': 0.003,
         'is_3d': False,
     }
 

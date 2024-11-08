@@ -87,8 +87,9 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
         # Convert back to np.array for easier handling
         return np.asarray(sorted_area_points)
 
-    def compute_reward(self, obs, info, is_3d=True, vel_factor=0.010):
-        return super().compute_reward(obs, info, is_3d, vel_factor)
+    def compute_reward(self, obs, info, is_3d=True, vel_factor=0.02,
+                       pos_thr=0.0001):
+        return super().compute_reward(obs, info, is_3d, vel_factor, pos_thr)
 
     def create_target(self, position=None, dimension=None):
         # virtualTarget
@@ -98,6 +99,9 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
 
     def lift_uav(self):
         self.sim.take_off(self.init_altitude)
+
+    def no_action_limit(self, position, pos_thr=0.0001):
+        return super().no_action_limit(position, pos_thr)
 
 
 class CrazyflieEnvDiscrete(CrazyflieEnvContinuous):

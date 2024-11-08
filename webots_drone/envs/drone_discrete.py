@@ -9,7 +9,6 @@ import numpy as np
 from gym import spaces
 
 from webots_drone.envs import DroneEnvContinuous
-from webots_drone.webots_simulation import WebotsSimulation
 
 
 def get_one_hot(targets, nb_classes):

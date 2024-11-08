@@ -23,15 +23,15 @@ def distance2reward(distance, ref_distance):
     return - abs(1. - distance / ref_distance)
 
 
-def velocity2reward(velocity, pos_thr=0.003):
+def velocity2reward(velocity, pos_thr=0.003, vel_factor=0.035):
     dist_diff = velocity
     dist_diff *= np.abs(velocity).round(3) > pos_thr  # ensure minimum diff
-    return dist_diff / 0.03
+    return dist_diff / vel_factor
 
 
 def compute_vector_reward(ref_position, pos_t, pos_t1, orientation_t1,
                           distance_target=36., distance_margin=5.,
-                          vel_factor=0.035):
+                          vel_factor=0.035, pos_thr=0.003):
     # compute orientation reward
     ref_orientation = compute_target_orientation(pos_t1, ref_position)
     r_orientation = orientation2reward(orientation_t1, ref_orientation)
@@ -40,7 +40,7 @@ def compute_vector_reward(ref_position, pos_t, pos_t1, orientation_t1,
     r_distance = distance2reward(dist_t1, distance_target)
     # compute velocity reward
     dist_t = compute_distance(pos_t, ref_position)
-    r_velocity = velocity2reward(dist_t - dist_t1)
+    r_velocity = velocity2reward(dist_t - dist_t1, pos_thr, vel_factor)
     # check zones
     zones = check_target_distance(dist_t1, distance_target, distance_margin)
     # inverse when trespass risk distance

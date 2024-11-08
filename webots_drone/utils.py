@@ -234,7 +234,7 @@ def check_target_distance(distance, distance_target, distance_margin=5.):
 
 def check_same_position(pisition1, position2, thr=0.003):
     dist_diff = compute_distance(pisition1, position2)
-    dist_diff *= np.abs(dist_diff).round(3) > 0.003
+    dist_diff *= np.abs(dist_diff).round(4) > thr
     return dist_diff == 0.
 
 

@@ -75,7 +75,8 @@ if __name__ == '__main__':
         'target_dim': [.025, .02],
         'height_limits': [.25, 2.25],
         'frame_skip': 6,
-        'vel_factor': 0.010,
+        'vel_factor': 0.02,
+        'pos_thr': 0.0001,
         'is_3d': True,
         'init_height': 0.3
     }
