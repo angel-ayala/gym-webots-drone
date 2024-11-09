@@ -13,11 +13,11 @@ from gym.utils import seeding
 
 from webots_drone.reward import compute_vector_reward
 from webots_drone.reward import compute_visual_reward
+from webots_drone.utils import compute_distance
 from webots_drone.utils import check_collision
 from webots_drone.utils import check_flight_area
 from webots_drone.utils import check_flipped
 from webots_drone.utils import check_near_object
-# from webots_drone.utils import min_max_norm
 from webots_drone.utils import check_same_position
 from webots_drone.utils import check_target_distance
 from webots_drone.utils import constrained_action
@@ -87,6 +87,7 @@ class DroneEnvContinuous(gym.Env):
         # flight_area and target discrete position
         self.flight_area = self.sim.get_flight_area(altitude_limits)
         self.sample_quadrants = list()
+        self.max_distance = compute_distance(*self.flight_area)
         self.quadrants = self.create_quadrants()
 
         # self.reward_limits = [-2. - (2.21 * self._frame_inter[0]),
@@ -234,12 +235,16 @@ class DroneEnvContinuous(gym.Env):
         if self.no_action_limit(info["position"]) and not zones[1]:
             logger.info(f"[{info['timestamp']}] Final state, Same position")
             discount -= 2.
-            info['final'] = 'No Action'
+            info['final'] = 'NoAction'
         # is_flipped
         elif check_flipped(info["orientation"], info["dist_sensors"]):
             logger.info(f"[{info['timestamp']}] Final state, Flipped")
             discount -= 2.
             info['final'] = 'Flipped'
+        elif self.vtarget.get_distance(info['position']) > self.max_distance:
+            logger.info(f"[{info['timestamp']}] Final state, MaxDistance")
+            discount -= 2.
+            info['final'] = 'MaxDistance'
 
         return discount
 

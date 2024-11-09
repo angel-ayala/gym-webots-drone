@@ -72,7 +72,7 @@ if __name__ == '__main__':
     sim_args = {
         'goal_threshold': 0.5,
         'target_pos': [1, -1, 0.5],
-        'target_dim': [.025, .02],
+        'target_dim': [.05, .02],
         'height_limits': [.25, 2.25],
         'frame_skip': 6,
         'vel_factor': 0.02,

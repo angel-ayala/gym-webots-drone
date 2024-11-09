@@ -22,7 +22,7 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
                  init_altitude=0.3,
                  altitude_limits=[0.25, 2.25],
                  fire_pos=2,
-                 fire_dim=[.025, .02],
+                 fire_dim=[.05, .02],
                  is_pixels=False,
                  zone_steps=10):
         super(CrazyflieEnvContinuous, self).__init__(
