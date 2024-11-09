@@ -282,6 +282,13 @@ class DroneEnvContinuous(gym.Env):
 
         return penalization
 
+    def get_uav_zone(self, info):
+        distance2target = self.vtarget.get_distance(info['position'])
+        zones = check_target_distance(distance2target,
+                                      self.distance_target,
+                                      self._goal_threshold)
+        return zones
+
     def compute_reward(self, obs, info, is_3d=False, vel_factor=0.035,
                        pos_thr=0.003):
         """Compute the distance-based reward.
@@ -319,10 +326,8 @@ class DroneEnvContinuous(gym.Env):
 
         # if self.is_pixels:
         #     reward += compute_visual_reward(obs)
-        distance2target = self.vtarget.get_distance(info['position'])
-        zones = check_target_distance(distance2target,
-                                      self.distance_target,
-                                      self._goal_threshold)
+        zones = self.get_uav_zone(info)
+
         # allow no action inside zone
         if zones[1]:
             self._in_zone_steps += 1
@@ -354,7 +359,15 @@ class DroneEnvContinuous(gym.Env):
                                       info['north_rad'], self.flight_area)
         self.sim.send_action(c_action)
         # read new state
-        return self.get_state()
+        observation, info = self.get_state()
+        zones = self.get_uav_zone(info)
+        # ensure no enter risk_zone
+        if zones[0]:
+            logger.info(f"[{info['timestamp']}] Final state, InsideRiskZone")
+            info['final'] = 'InsideRiskZone'
+            self._end = True
+
+        return observation, info
 
     def lift_uav(self):
         diff_altitude = float('inf')
@@ -412,12 +425,12 @@ class DroneEnvContinuous(gym.Env):
         if self.__time_limit():
             logger.info(f"[{info['timestamp']}] Final state, Time limit")
             truncated = True
-            info['final'] = 'time_limit'
+            info['final'] = 'TimeLimit'
         # goal state
         if self._in_zone_steps >= self.zone_steps:
             logger.info(f"[{info['timestamp']}] Final state, Goal reached")
             truncated = True
-            info['final'] = 'goal_found'
+            info['final'] = 'GoalFound'
 
         # normalize step reward
         # reward = self.norm_reward(reward)
