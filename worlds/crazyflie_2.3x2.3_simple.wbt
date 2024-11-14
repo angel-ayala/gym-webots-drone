@@ -1,0 +1,61 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/robots/bitcraze/crazyflie/protos/Crazyflie.proto"
+EXTERNPROTO "../protos/RadioController.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Parquetry.proto"
+EXTERNPROTO "../protos/OilBarrel.proto"
+
+WorldInfo {
+  info [
+    "Bitcraze's Crazyflie drone."
+    "This simulation allows you to pilot the drone with your keyboard."
+  ]
+  title "Crazyflie"
+}
+Viewpoint {
+  orientation -0.2834040541578068 0.2834040541578068 0.9161682619332749 1.658239914575009
+  position 0.02382286088697383 -5.089927599605559 3.398252207568564
+  follow "Crazyflie"
+  followType "None"
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+DEF FlightArea Floor {
+  translation 0 0 0.001
+  name "flightFloor"
+  size 2.3 2.3
+  appearance Parquetry {
+  }
+}
+DEF Target OilBarrel {
+  translation -0.51 0.67 0.014
+  rotation 0 1 0 4.692820414042842e-06
+  height 0.025
+  radius 0.02
+}
+Floor {
+  name "roomFloor"
+  size 6 6
+}
+DEF Drone Crazyflie {
+  controller "crazyflie_controller"
+  extensionSlot [
+    Receiver {
+      name "ActionReceiver"
+      channel 6
+    }
+    Emitter {
+      name "StateEmitter"
+      channel 4
+    }
+  ]
+}
+RadioController {
+  translation -0.869999 1.48 0.02
+  rotation -0.357406871539237 -0.3574078715388776 -0.8628556898685809 1.71778
+}
