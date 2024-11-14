@@ -62,7 +62,7 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
         for z in area[:, 2]:
             for x in area[:, 0]:
                 for y in area[:, 1]:
-                    if x == y == 0:
+                    if x == area[1, 0] and y == area[1, 1]:  # avoid center coordinates
                         continue
                     area_points.append([x, y, z])
         area_points = np.asarray(area_points)
@@ -114,7 +114,7 @@ class CrazyflieEnvDiscrete(CrazyflieEnvContinuous):
                  init_altitude=0.3,
                  altitude_limits=[0.25, 2.25],
                  fire_pos=2,
-                 fire_dim=[.025, .02],
+                 fire_dim=[.05, .02],
                  is_pixels=False,
                  zone_steps=10):
         super(CrazyflieEnvDiscrete, self).__init__(

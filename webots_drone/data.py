@@ -111,7 +111,7 @@ class MultipleCallbacksOnStep:
 class StoreStepData:
     """Callback for save a Gym.state data."""
 
-    def __init__(self, store_path, n_sensors=9, epsilon=False):
+    def __init__(self, store_path, n_sensors=9, epsilon=False, extra_info=True):
         self.store_path = Path(store_path)
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
         if self.store_path.is_file():
@@ -121,6 +121,7 @@ class StoreStepData:
         self._phase = 'init'
         self._ep = 0
         self._iteration = -1
+        self.extra_info = extra_info
         self.create_header()
 
     def set_init_state(self, state, info):
@@ -164,17 +165,19 @@ class StoreStepData:
                       'target_pos_z']
         data_cols += ['target_dim_height',
                       'target_dim_radius']
-        data_cols += ['rc_pos_x',
-                      'rc_pos_y',
-                      'rc_pos_z']
-        data_cols += ['emitter_pos_x',
-                      'emitter_pos_y',
-                      'emitter_pos_z',
-                      'emitter_strength']
-        data_cols += ['motors_vel_front_left',
-                      'motors_vel_front_right',
-                      'motors_vel_rear_left',
-                      'motors_vel_rear_right']
+
+        if self.extra_info:
+            data_cols += ['rc_pos_x',
+                          'rc_pos_y',
+                          'rc_pos_z']
+            data_cols += ['emitter_pos_x',
+                          'emitter_pos_y',
+                          'emitter_pos_z',
+                          'emitter_strength']
+            data_cols += ['motors_vel_front_left',
+                          'motors_vel_front_right',
+                          'motors_vel_rear_left',
+                          'motors_vel_rear_right']
         # create file headers
         with open(self.store_path, 'w') as outfile:
             outfile.writelines(','.join(data_cols) + '\n')
@@ -186,7 +189,7 @@ class StoreStepData:
         row.append(info['timestamp'])  # action
         row.extend(self.last_state)  # state
         # action
-        if type(sample[1]) is list:
+        if isinstance(sample[1], (list, tuple, np.ndarray)):
             action_str = ','.join(map(str, sample[1]))
             row.append(f'"[{action_str}]"')
         else:
@@ -206,10 +209,12 @@ class StoreStepData:
 
         row.extend(info['target_position'])
         row.extend(info['target_dim'])
-        row.extend(info['rc_position'])
-        row.extend(info['emitter']['direction'])
-        row.append(info['emitter']['signal_strength'])
-        row.extend(info['motors_vel'])
+
+        if self.extra_info:
+            row.extend(info['rc_position'])
+            row.extend(info['emitter']['direction'])
+            row.append(info['emitter']['signal_strength'])
+            row.extend(info['motors_vel'])
 
         # append data
         with open(self.store_path, 'a') as outfile:

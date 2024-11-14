@@ -170,7 +170,7 @@ class CustomVectorObservation(gym.Wrapper):
                  target_dist=False, target_pos=False, target_dim=False,
                  add_action=False, angles_range=[np.pi, np.pi / 2., np.pi],
                  avel_range=[np.pi, np.pi / 2., np.pi],
-                 speed_range=[4., 4., 1.]):
+                 speed_range=[4., 4., 1.], n_dist_sensors=9):
         super().__init__(env)
         obs_elems = 0
         obs_high_limits = []
@@ -226,9 +226,9 @@ class CustomVectorObservation(gym.Wrapper):
             obs_elems += self.action_vars
 
         if 'dist_sensors' in uav_data:
-            obs_elems += 9
-            obs_high_limits.extend([1. for _ in range(9)])
-            obs_low_limits.extend([0. for _ in range(9)])
+            obs_elems += n_dist_sensors
+            obs_high_limits.extend([1. for _ in range(n_dist_sensors)])
+            obs_low_limits.extend([0. for _ in range(n_dist_sensors)])
 
         obs_shape = (obs_elems, )
         self.observation_space = spaces.Box(low=np.asarray(obs_low_limits),

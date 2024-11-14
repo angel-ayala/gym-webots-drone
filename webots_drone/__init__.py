@@ -16,7 +16,7 @@ if "WEBOTS_HOME" in os.environ:
     __all__ = ['WebotsSimulation', 'CFSimulation']
 
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 __author__ = 'Angel Ayala'
 
 
@@ -38,4 +38,9 @@ register(
 register(
     id='webots_drone/CrazyflieEnvDiscrete-v0',
     entry_point='webots_drone.envs:CrazyflieEnvDiscrete',
+)
+
+register(
+    id='webots_drone/RealCrazyflieEnvContinuous-v0',
+    entry_point='webots_drone.envs:RealCrazyflieEnvContinuous',
 )
