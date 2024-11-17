@@ -21,11 +21,11 @@ class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
                  time_limit_seconds=60,  # 1 min
                  max_no_action_seconds=5,  # 5 sec
                  frame_skip=6,  # 1 sec
-                 goal_threshold=0.5,
+                 goal_threshold=0.25,
                  init_altitude=1.,
                  altitude_limits=[0.25, 2.],
-                 fire_pos=2,
-                 fire_dim=[.05, .02],
+                 target_pos=2,
+                 target_dim=[.05, .02],
                  is_pixels=False,
                  zone_steps=10):
 
@@ -40,8 +40,8 @@ class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
               goal_threshold=goal_threshold,
               init_altitude=init_altitude,
               altitude_limits=altitude_limits,
-              fire_pos=fire_pos,
-              fire_dim=fire_dim,
+              target_pos=target_pos,
+              target_dim=target_dim,
               is_pixels=is_pixels,
               zone_steps=zone_steps)
 
@@ -62,12 +62,10 @@ class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
                                         flight_area=visible_area)
         logger.info(f"Connected to {self.sim.drone}")
 
-    def create_target(self, position=None, dimension=None):
+    def create_target(self, dimension=None):
         # virtualTarget
         from webots_drone.target import VirtualTarget
-        if type(position) is int:
-            position = self.quadrants[position]
-        return VirtualTarget(position=position, dimension=dimension, is_3d=True)
+        return VirtualTarget(dimension=dimension, is_3d=True)
 
     def get_state(self):
         """Process the environment to get a state."""
@@ -86,14 +84,13 @@ class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
 
         return state, state_data
 
-    def reset(self, seed=None, fire_quadrant=None, **kwargs):
+    def reset(self, seed=None, target_pos=None, target_dim=None, **kwargs):
         """Reset episode in the Webots simulation."""
         # restart simulation
         self.seed(seed)
         self.sim.reset()
         self.last_state, self.last_info = self.get_state()
-        fquadrant = self._fire_pos if fire_quadrant is None else fire_quadrant
-        self.set_fire_quadrant(fquadrant)
+        self.set_target(position=target_pos, dimension=target_dim)
         self.init_runtime_vars()
         self.last_state, self.last_info = self.get_state()
 
@@ -191,8 +188,8 @@ if __name__ == '__main__':
             # init_altitude=0.3,
             init_altitude=1.,
             altitude_limits=[0.25, 2.],
-            fire_pos=2,
-            fire_dim=[.05, .02],
+            target_pos=2,
+            target_dim=[.05, .02],
             is_pixels=False,
             zone_steps=10)
 

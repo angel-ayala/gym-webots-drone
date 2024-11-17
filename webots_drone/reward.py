@@ -23,24 +23,30 @@ def distance2reward(distance, ref_distance):
     return - abs(1. - distance / ref_distance)
 
 
+def height2reward(height_diff):
+    return - abs(height_diff)
+
+
 def velocity2reward(velocity, pos_thr=0.003, vel_factor=0.035):
     dist_diff = velocity
     dist_diff *= np.abs(velocity).round(3) > pos_thr  # ensure minimum diff
     return dist_diff / vel_factor
 
 
-def compute_vector_reward(ref_position, pos_t, pos_t1, orientation_t1,
+def compute_vector_reward(vtarget, pos_t, pos_t1, orientation_t1,
                           distance_target=36., distance_margin=5.,
                           vel_factor=0.035, pos_thr=0.003):
     # compute orientation reward
-    ref_orientation = compute_target_orientation(pos_t1, ref_position)
+    ref_orientation = vtarget.get_orientation(pos_t1)
     r_orientation = orientation2reward(orientation_t1, ref_orientation)
     # compute distance reward
-    dist_t1 = compute_distance(pos_t1, ref_position)
+    dist_t1 = vtarget.get_distance(pos_t1)
     r_distance = distance2reward(dist_t1, distance_target)
     # compute velocity reward
-    dist_t = compute_distance(pos_t, ref_position)
+    dist_t = vtarget.get_distance(pos_t)
     r_velocity = velocity2reward(dist_t - dist_t1, pos_thr, vel_factor)
+    # compute velocity reward
+    r_height = height2reward(vtarget.get_height_diff(pos_t1))
     # check zones
     zones = check_target_distance(dist_t1, distance_target, distance_margin)
     # inverse when trespass risk distance
@@ -60,7 +66,7 @@ def compute_vector_reward(ref_position, pos_t, pos_t1, orientation_t1,
     # compose reward
     r_velocity = r_velocity * r_orientation  # [-1, 1]
     r_pose = r_distance + r_orientation - 1  # ]-inf, 0]
-    r_sum = r_velocity + r_pose * 0.1 + r_bonus
+    r_sum = r_velocity + r_height + r_pose * 0.1 + r_bonus
     return r_sum
 
 
@@ -80,8 +86,10 @@ def compute_visual_reward(observation):
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
+    from webots_drone.target import VirtualTarget
 
-    def calculate_reward_grid(position_range, ref_position, ref_orientation):
+
+    def calculate_reward_grid(position_range, target_obj, ref_distance, ref_orientation):
         # Create a grid of x, y coordinates
         x_values = np.linspace(position_range[0], position_range[1], num=100)
         y_values = np.linspace(position_range[1], position_range[0], num=100)
@@ -93,15 +101,16 @@ if __name__ == '__main__':
 
         for i, x in enumerate(x_values):
             for j, y in enumerate(y_values):
-                position = [x, y]
+                position = [x, y, 0]
                 # Calculate distance reward
-                distance = compute_distance(position, ref_position)
+                distance = target_obj.get_distance(position)
                 distance_grid[i, j, 0] = distance
                 distance_grid[i, j, 1] = distance2reward(
-                    distance, ref_distance=36.5)
+                    distance, ref_distance=ref_distance)
                 # Calculate orientation reward
-                orientation = compute_target_orientation(position, ref_position)
-                orientation_grid[i, j] = orientation2reward(orientation, ref_orientation)
+                orientation = vtarget.get_orientation(position)
+                orientation_grid[i, j] = orientation2reward(orientation,
+                                                            ref_orientation)
 
         return x_grid, y_grid, orientation_grid, distance_grid
 
@@ -150,21 +159,30 @@ if __name__ == '__main__':
         new_array = np.reshape(new_array, orig_shape)
         return new_array
 
-    # Define the range of positions and orientations
-    agent_position_range = (-100, 100)  # Example range for x and y coordinates
-    plot_all = True
-    distance_target = 36.5
-    distance_margin = 5
-    d_central = distance_target - distance_margin / 2
-
     # Define the target position
-    target_position = [-50, 50]
-    initial_position = [0, 0]
-    target_orientation = compute_target_orientation(initial_position, target_position)
+    target_position = [-50, 50, 0]
+    target_dimension = [7., 3.5]
+    flight_area = np.array([[-100, -100, 11],
+                            [100, 100, 75]])
+    vtarget = VirtualTarget(dimension=target_dimension)
+    vtarget.set_position(flight_area, target_position)
+    vehicle_dim = [0.15, 0.3]  # [height, radius]
+
+    # Define the range of positions and orientations
+    agent_position_range = flight_area[:, 0]  # Example range for x and y coordinates
+    plot_all = True
+    goal_threshold = 5.
+    distance_target = vtarget.get_risk_distance(goal_threshold / 2.) + vehicle_dim[1]
+    d_central = distance_target - goal_threshold / 2
+
+    initial_position = [0, 0, 0]
+    # target_orientation = compute_target_orientation(initial_position, target_position)
+    target_orientation = vtarget.get_orientation(initial_position)
 
     # Calculate the reward grid
     x_grid, y_grid, orientation_grid, distance_grid = \
-        calculate_reward_grid(agent_position_range, target_position, target_orientation)
+        calculate_reward_grid(agent_position_range, vtarget, distance_target, target_orientation)
+        # calculate_reward_grid(agent_position_range, target_position, target_orientation)
 
     r_orientation = orientation_grid
     p_distance = distance_grid[:, :, 0]

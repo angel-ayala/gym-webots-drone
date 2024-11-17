@@ -8,7 +8,6 @@ Created on Wed May 27 08:49:45 2020
 import numpy as np
 
 from webots_drone.utils import bytes2image
-from webots_drone.utils import orientation_correction
 
 
 class Drone:
@@ -133,9 +132,7 @@ class Drone:
         position = self.gps.getValues()
         speed = self.gps.getSpeedVector()
         compass = self.compass.getValues()
-        north_rad = np.arctan2(compass[0], compass[1])
-        # sensor orientation correction
-        north_rad = orientation_correction(north_rad)
+        north_rad = np.arctan2(compass[1], compass[0])
 
         return orientation, angular_velocity, position, speed, north_rad
 

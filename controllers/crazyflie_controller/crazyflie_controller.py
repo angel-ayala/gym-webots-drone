@@ -10,9 +10,11 @@ import numpy as np
 from controller import Robot
 
 from crazyflie_quadcopter import CFQuadcopter
+from webots_drone.utils import angle_90deg_offset
+from webots_drone.utils import angle_inverse
 from webots_drone.utils import encode_image
-from webots_drone.utils import receiver_get_json
 from webots_drone.utils import emitter_send_json
+from webots_drone.utils import receiver_get_json
 
 
 import sys
@@ -131,6 +133,9 @@ class CFController(Robot):
         uav_north_rad = uav_orientation[2]
         uav_distance_sensors = self.__drone.get_dist_sensors()
         uav_image = self.__drone.get_image()
+
+        # Compass from yaw angle in ENU reference system
+        uav_north_rad = angle_inverse(angle_90deg_offset(uav_north_rad))
 
         # read motors current velocity
         motors_vel = [m.getVelocity() for m in self.__drone.motors]

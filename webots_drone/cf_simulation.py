@@ -30,6 +30,7 @@ class CFSimulation(WebotsSimulation):
         super(CFSimulation, self).__init__()
         # replace image size
         self.image_shape = (324, 324, 4)
+        self.vehicle_dim = [0.03, 0.05]  # [height, radius]
 
     @staticmethod
     def get_control_ranges():
@@ -65,12 +66,58 @@ class CFSimulation(WebotsSimulation):
         return super().get_flight_area(altitude_limits)
 
 
+def kb2action(kb, limits):
+    # capture control data
+    key = kb.getKey()
+
+    run_flag = True
+    take_shot = False
+    roll_angle = 0.
+    pitch_angle = 0.
+    yaw_angle = 0.  # drone.yaw_orientation
+    altitude = 0.  # drone.target_altitude
+
+    while key > 0:
+        # vel_x
+        if key == kb.LEFT:
+            pitch_angle = limits[1][1]
+        elif key == kb.RIGHT:
+            pitch_angle = limits[0][1]
+        # vel_y
+        elif key == kb.UP:
+            roll_angle = limits[1][0]
+        elif key == kb.DOWN:
+            roll_angle = limits[0][0]
+        # yaw
+        elif key == ord('D'):
+            yaw_angle = limits[0][2]
+        elif key == ord('A'):
+            yaw_angle = limits[1][2]
+        # vel_z
+        elif key == ord('W'):
+            altitude = limits[1][3]  # * 0.1
+        elif key == ord('S'):
+            altitude = limits[0][3]  # * 0.1
+        # quit
+        elif key == ord('Q'):
+            print('Terminated')
+            run_flag = False
+        # take photo
+        elif key == ord('P'):
+            print('Camera frame saved')
+            take_shot = True
+        key = kb.getKey()
+
+    action = [roll_angle, pitch_angle, yaw_angle, altitude]
+    return action, run_flag, take_shot
+
+
 if __name__ == '__main__':
     import traceback
     from webots_simulation import run
 
     sim_args = {
-        'goal_threshold': 0.5,
+        'goal_threshold': 0.25,
         'target_pos': [1, -1, 0.5],
         'target_dim': [.05, .02],
         'height_limits': [.25, 2.25],
@@ -78,13 +125,14 @@ if __name__ == '__main__':
         'vel_factor': 0.02,
         'pos_thr': 0.0001,
         'is_3d': True,
-        'init_height': 0.3
+        'init_height': 0.3,
+        'is_vel_control': True
     }
 
     # run controller
     try:
         controller = CFSimulation()
-        run(controller, show=True, **sim_args)
+        run(controller, show=True, action_fn=kb2action, **sim_args)
     except Exception as e:
         traceback.print_tb(e.__traceback__)
         print(e)

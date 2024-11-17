@@ -209,17 +209,20 @@ def target_mask(observation):
     return mask, area, cpoint
 
 
-def orientation_correction(angle):
+def angle_90deg_offset(angle):
     """Apply UAV sensor offset."""
     angle -= np.pi / 2.
     if angle < -np.pi:
         angle += 2 * np.pi
     return angle
 
+def angle_inverse(angle):
+    return -angle
+
 
 def compute_target_orientation(position, ref_position):
     angle = compute_orientation(position, ref_position)
-    angle = orientation_correction(angle)
+    angle = angle_inverse(angle_90deg_offset(angle))
     return angle
 
 
@@ -238,16 +241,21 @@ def check_same_position(pisition1, position2, thr=0.003):
     return dist_diff == 0.
 
 
-def constrained_action(action, position, north_rad, flight_area):
+def constrained_action(action, position, north_rad, flight_area, is_vel=False):
     """Check drone position and orientation to keep it inside flight_area."""
-    roll_angle, pitch_angle, yaw_angle, altitude = action
+    # if velocity control swap roll and pitch values
+    if is_vel:
+        pitch_angle, roll_angle, yaw_angle, altitude = action
+        roll_angle = -roll_angle
+    else:
+        roll_angle, pitch_angle, yaw_angle, altitude = action
 
     # check area limits
     out_area = check_flight_area(position, flight_area)
 
     # essential flags
     is_north = np.pi / 2. > north_rad > -np.pi / 2.  # north
-    is_east = north_rad < 0
+    is_east = north_rad > 0
     orientation = [is_north,        # north
                    not is_north,    # south
                    is_east,         # east
@@ -298,4 +306,8 @@ def constrained_action(action, position, north_rad, flight_area):
             or (out_area[5] and altitude < 0)):  # descense
         altitude = 0.
 
-    return roll_angle, pitch_angle, yaw_angle, altitude
+    if is_vel:
+        roll_angle = -roll_angle
+        return pitch_angle, roll_angle, yaw_angle, altitude
+    else:
+        return roll_angle, pitch_angle, yaw_angle, altitude

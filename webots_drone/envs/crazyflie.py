@@ -10,6 +10,7 @@ from gym import logger
 from gym import spaces
 
 from webots_drone.envs import DroneEnvContinuous
+from webots_drone.utils import constrained_action
 
 
 class CrazyflieEnvContinuous(DroneEnvContinuous):
@@ -18,11 +19,11 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
     def __init__(self, time_limit_seconds=60,  # 1 min
                  max_no_action_seconds=5,  # 5 sec
                  frame_skip=6,  # 1 sec
-                 goal_threshold=0.5,
+                 goal_threshold=0.25,
                  init_altitude=0.3,
-                 altitude_limits=[0.25, 2.25],
-                 fire_pos=2,
-                 fire_dim=[.05, .02],
+                 altitude_limits=[0.25, 2.],
+                 target_pos=2,
+                 target_dim=[.05, .02],
                  is_pixels=False,
                  zone_steps=10):
         super(CrazyflieEnvContinuous, self).__init__(
@@ -32,8 +33,8 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
             goal_threshold=goal_threshold,
             init_altitude=init_altitude,
             altitude_limits=altitude_limits,
-            fire_pos=fire_pos,
-            fire_dim=fire_dim,
+            target_pos=target_pos,
+            target_dim=target_dim,
             is_pixels=is_pixels,
             zone_steps=zone_steps)
 
@@ -91,17 +92,18 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
                        pos_thr=0.0001):
         return super().compute_reward(obs, info, is_3d, vel_factor, pos_thr)
 
-    def create_target(self, position=None, dimension=None):
+    def create_target(self, dimension=None):
         # virtualTarget
-        vtarget = super().create_target(position, dimension)
+        vtarget = super().create_target(dimension)
         vtarget.is_3d = True
         return vtarget
 
-    def lift_uav(self):
-        self.sim.take_off(self.init_altitude)
+    def update_no_action_counter(self, position, pos_thr=0.0001):
+        return super().update_no_action_counter(position, pos_thr)
 
-    def no_action_limit(self, position, pos_thr=0.0001):
-        return super().no_action_limit(position, pos_thr)
+    def constraint_action(self, action, info):
+        return constrained_action(action, info['position'], info['north_rad'],
+                                  self.flight_area, is_vel=True)
 
 
 class CrazyflieEnvDiscrete(CrazyflieEnvContinuous):
@@ -110,11 +112,11 @@ class CrazyflieEnvDiscrete(CrazyflieEnvContinuous):
     def __init__(self, time_limit_seconds=60,  # 1 min
                  max_no_action_seconds=5,  # 5 sec
                  frame_skip=6,  # 1 sec
-                 goal_threshold=0.5,
+                 goal_threshold=0.25,
                  init_altitude=0.3,
-                 altitude_limits=[0.25, 2.25],
-                 fire_pos=2,
-                 fire_dim=[.05, .02],
+                 altitude_limits=[0.25, 2.],
+                 target_pos=2,
+                 target_dim=[.05, .02],
                  is_pixels=False,
                  zone_steps=10):
         super(CrazyflieEnvDiscrete, self).__init__(
@@ -124,8 +126,8 @@ class CrazyflieEnvDiscrete(CrazyflieEnvContinuous):
             goal_threshold=goal_threshold,
             init_altitude=init_altitude,
             altitude_limits=altitude_limits,
-            fire_pos=fire_pos,
-            fire_dim=fire_dim,
+            target_pos=target_pos,
+            target_dim=target_dim,
             is_pixels=is_pixels,
             zone_steps=zone_steps)
 

@@ -11,11 +11,6 @@ from gym import spaces
 from webots_drone.envs import DroneEnvContinuous
 
 
-def get_one_hot(targets, nb_classes):
-    res = np.eye(nb_classes)[np.array(targets).reshape(-1)]
-    return res.reshape((len(targets), nb_classes))
-
-
 class DroneEnvDiscrete(DroneEnvContinuous):
     """Gym enviroment to control the Fire scenario in the Webots simulator."""
 
@@ -30,8 +25,8 @@ class DroneEnvDiscrete(DroneEnvContinuous):
                  goal_threshold=5.,
                  init_altitude=25.,
                  altitude_limits=[11, 75],
-                 fire_pos=2,
-                 fire_dim=[7., 3.5],
+                 target_pos=2,
+                 target_dim=[7., 3.5],
                  is_pixels=True,
                  zone_steps=0):
         super(DroneEnvDiscrete, self).__init__(
@@ -41,8 +36,8 @@ class DroneEnvDiscrete(DroneEnvContinuous):
             goal_threshold=goal_threshold,
             init_altitude=init_altitude,
             altitude_limits=altitude_limits,
-            fire_pos=fire_pos,
-            fire_dim=fire_dim,
+            target_pos=target_pos,
+            target_dim=target_dim,
             is_pixels=is_pixels,
             zone_steps=zone_steps)
 

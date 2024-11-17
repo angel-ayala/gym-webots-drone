@@ -42,6 +42,7 @@ class WebotsSimulation(Supervisor):
         # simulation timestep
         self.timestep = int(self.getBasicTimeStep())
         self.image_shape = (240, 400, 4)
+        self.vehicle_dim = [0.15, 0.3]  # [height, radius]
         self._data = dict()
         # actions value boundaries
         self.limits = self.get_control_ranges()
@@ -226,6 +227,23 @@ class WebotsSimulation(Supervisor):
         emitter_send_json(self.action, command)
         self.one_step()  # step to process the action
         self.read_data()
+    
+    def take_off(self, height):
+        lift_action = [0., 0., 0., self.limits[1][3]]
+        height_diff = lambda x: x - self.get_data()['position'][2]
+        # wait for lift momentum
+        min_lift = self.get_data()['position'][2] + 1.
+        while height_diff(min_lift) > 0.:
+            self.send_action(lift_action)
+
+        # change vertical position to reduce take off waiting
+        tpos = self.drone_node['get_pos']()
+        tpos[2] = height - 0.1
+        self.drone_node['set_pos'](tpos.tolist())
+
+        # wait for deisre altitude
+        while height_diff(height) > 0.:
+            self.send_action(lift_action)
 
     def sync(self):
         # wait for data
@@ -258,7 +276,7 @@ def print_control_keys():
     print("- 'q': exit.")
 
 
-def get_kb_action(kb, limits):
+def kb2action(kb, limits):
     # capture control data
     key = kb.getKey()
 
@@ -304,7 +322,7 @@ def get_kb_action(kb, limits):
     return action, run_flag, take_shot
 
 
-def run(controller, show=True, **kwargs):
+def run(controller, show=True, action_fn=kb2action, **kwargs):
     """Run controller's main loop.
 
     Capture the keyboard and translate into fixed float values to variate
@@ -330,7 +348,6 @@ def run(controller, show=True, **kwargs):
     from webots_drone.reward import compute_vector_reward
     from webots_drone.utils import constrained_action
     from webots_drone.target import VirtualTarget
-    from webots_drone.utils import compute_target_orientation
     # from webots_drone.envs.preprocessor import info2image
     # from webots_drone.reward import compute_visual_reward
 
@@ -340,22 +357,25 @@ def run(controller, show=True, **kwargs):
     kb.enable(controller.timestep)
 
     # Start simulation with random FireSmoke position
-    goal_threshold = kwargs['goal_threshold']
-    fire_pos = kwargs['target_pos']
-    fire_dim = kwargs['target_dim']
-    altitude_limits = kwargs['height_limits']
-    frame_skip = kwargs['frame_skip']
-    is_3d = kwargs['is_3d']
-    reward_vel_factor = kwargs['vel_factor']
-    reward_pos_thr = kwargs['pos_thr']
+    goal_threshold = kwargs.get('goal_threshold', 5.)
+    target_pos = kwargs.get('target_pos', [-50, 50])
+    target_dim = kwargs.get('target_dim', [7., 3.5])
+    altitude_limits = kwargs.get('height_limits', [11., 75.])
+    frame_skip = kwargs.get('frame_skip', 25)
+    reward_vel_factor = kwargs.get('vel_factor', 0.035)
+    reward_pos_thr = kwargs.get('pos_thr', 0.003)
+    is_3d = kwargs.get('is_3d', False)
+    is_vel_control = kwargs.get('is_vel_control', False)
 
     controller.seed()
     flight_area = controller.get_flight_area(altitude_limits)
 
     # target
-    vtarget = VirtualTarget(dimension=fire_dim,
+    vtarget = VirtualTarget(dimension=target_dim,
                             webots_node=controller.target_node, is_3d=is_3d)
-    vtarget.set_position(flight_area, fire_pos)
+    vtarget.set_position(target_pos)
+    distance2target = vtarget.get_risk_distance(goal_threshold / 2.) \
+        + controller.vehicle_dim[1]
 
     controller.play()
     controller.sync()
@@ -367,8 +387,7 @@ def run(controller, show=True, **kwargs):
     state = controller.get_data()
     next_state = controller.get_data()
 
-    if 'init_height' in kwargs.keys():
-        controller.take_off(kwargs['init_height'])
+    controller.take_off(kwargs.get('init_height', 1.))
 
     print('Simulation is running!')
     while (run_flag):  # and drone.getTime() < 30):
@@ -377,7 +396,7 @@ def run(controller, show=True, **kwargs):
         uav_pos_t1 = next_state['position']   # pos_t+1
         uav_ori_t1 = next_state['north_rad']  # orientation
         target_xy = vtarget.position
-        target_ori = compute_target_orientation(uav_pos_t1, target_xy)
+        target_ori = vtarget.get_orientation(uav_pos_t1)
         if not is_3d:
             uav_pos_t[2] = uav_pos_t1[2] = target_xy[2]
 
@@ -388,10 +407,9 @@ def run(controller, show=True, **kwargs):
         distance_diff *= np.abs(distance_diff) > reward_pos_thr
 
         reward = compute_vector_reward(
-            target_xy, uav_pos_t, uav_pos_t1, uav_ori_t1,
-            distance_target=vtarget.get_risk_distance(goal_threshold / 2.),
-            distance_margin=goal_threshold, vel_factor=reward_vel_factor,
-            pos_thr=reward_pos_thr)
+            vtarget, uav_pos_t, uav_pos_t1, uav_ori_t1,
+            distance_target=distance2target, distance_margin=goal_threshold,
+            vel_factor=reward_vel_factor, pos_thr=reward_pos_thr)
 
         # observation = info2image(next_state, output_size=84)
         # reward += compute_visual_reward(observation)
@@ -401,7 +419,7 @@ def run(controller, show=True, **kwargs):
                   f" - post_t+1: {uav_pos_t1[0]:.3f} {uav_pos_t1[1]:.3f}"
                   f" (N:{uav_ori_t1:.3f}/{target_ori:.3f})"
                   f" -> reward ({reward:.4f}) {accum_reward:.4f}"
-                  f" diff: {distance_diff:.4f} ({curr_distance:.4f}/{vtarget.get_risk_distance(goal_threshold/2.):.4f})")
+                  f" diff: {distance_diff:.4f} ({curr_distance:.4f}/{distance2target:.4f})")
             accum_reward = 0
 
         if take_shot:
@@ -410,9 +428,9 @@ def run(controller, show=True, **kwargs):
 
         state = next_state.copy()
         # capture action
-        action, run_flag, take_shot = get_kb_action(kb, controller.limits)
+        action, run_flag, take_shot = action_fn(kb, controller.limits)
         action = constrained_action(action, state['position'], state['north_rad'],
-                                    flight_area)
+                                    flight_area, is_vel=is_vel_control)
         # perform action
         controller.send_action(action)
         # capture state
@@ -429,13 +447,18 @@ if __name__ == '__main__':
     # arguments
     sim_args = {
         'goal_threshold': 5.,
-        'target_pos': [50, -50],
+        'target_pos': [-50, 50],
+        # 'target_pos': [50, 50],
+        # 'target_pos': [50, -50],
+        # 'target_pos': [-50, -50],
         'target_dim': [7., 3.5],
         'height_limits': [11., 75.],
         'frame_skip': 25,
         'vel_factor': 0.035,
         'pos_thr': 0.003,
         'is_3d': False,
+        'init_height': 20.,
+        'is_vel_control': False
     }
 
     # run controller
