@@ -11,6 +11,8 @@ from gym import logger
 from pathlib import Path
 
 from webots_drone.envs import CrazyflieEnvContinuous
+from webots_drone.utils import angle_90deg_offset
+from webots_drone.utils import angle_inverse
 
 
 class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
@@ -75,7 +77,9 @@ class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
         # angular values from degree to radians
         state_data['orientation'] = np.radians(state_data['orientation'])
         state_data['angular_velocity'] = np.radians(state_data['angular_velocity'])
-        state_data['north_rad'] = np.radians(state_data['north_deg'])
+        # Compass from yaw angle in ENU reference system
+        uav_north_rad = np.radians(state_data['north_deg'])
+        state_data['north_rad'] = angle_inverse(angle_90deg_offset(uav_north_rad))
         del state_data['north_deg']
         # change the line below if any distance sensor is available
         state_data['dist_sensors'] = []
@@ -126,57 +130,74 @@ def print_state(state):
     print('[StateInfo]:', state_str)
 
 
-def run_episode(drone_env: RealCrazyflieEnvContinuous, ep: int = 0, logs_path: Union[Path, None] = None):
-    observation, info = drone_env.reset()
-    terminate = False
-    while not terminate:
-        # ------------------------- Capture control signal ---------------------------
-        # vel_x, vel_y, rate_yaw, vel_z
-        action = keyboard2action(drone_env.action_limits[1])
-
-        # --------------- Send control signal to env ---------------------------
-        observation, reward, end, truncated, info = drone_env.step(action)
-        terminate = end or truncated
-        # print_state(info)
-        gpos = ", ".join([f"{v:.3f}" for v in info['target_position']])
-        tdist = drone_env.vtarget.get_distance(info['position'])
-        gdist = drone_env.distance_target
-        print(f"R:{reward:.4f}\tGDist: {tdist:.3f} / {gdist:.3f} ({gpos})")
-
-        if keyboard.is_pressed('space'):
-            terminate = True
-
-        if logs_path is not None:
-            log_data = {'episode': ep,
-                        'home_position': drone_env.sim.drone.home_pos}
-            log_data.update(info.copy())
-            log_data['action'] = action
-            log_data['reward'] = reward
-            log_data['end'] = end
-            log_data['truncated'] = truncated
-            log_data['dist_current'] = tdist
-            log_data['dist_goal'] = gdist
-            log_dict(logs_path, log_data)
-
-
 if __name__ == '__main__':
     import keyboard
     import traceback
     import datetime
     from pathlib import Path
-    from utils import keyboard2action
-    from utils import log_dict
+    import sys
+
+    from webots_drone.data import StoreStepData
 
     logger.set_level(logger.DEBUG)
 
     episodes = 1
 
-    try:
-        # Summary log_file
-        logs_dir = Path("./logs_env")
-        timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        logs_path = logs_dir / f"GymCrazyflieEnv_{timestamp}.csv"
+    def keyboard2action(att_values):
+        action_cmd = [0] * 4
 
+        # Roll
+        if keyboard.is_pressed('right'):
+            action_cmd[0] = att_values[0]
+        if keyboard.is_pressed('left'):
+            action_cmd[0] = -att_values[0]
+
+        # Pitch
+        if keyboard.is_pressed('up'):
+            action_cmd[1] = att_values[1]
+        if keyboard.is_pressed('down'):
+            action_cmd[1] = -att_values[1]
+
+        # Yaw
+        if keyboard.is_pressed('D'):
+            action_cmd[2] = att_values[2]
+        if keyboard.is_pressed('A'):
+            action_cmd[2] = -att_values[2]
+
+        # Height
+        if keyboard.is_pressed('W'):
+            action_cmd[3] = att_values[3]
+        if keyboard.is_pressed('S'):
+            action_cmd[3] = -att_values[3]
+
+        return action_cmd
+
+    def run_episode(drone_env: RealCrazyflieEnvContinuous, ep: int = 0, logs_callback: Union[StoreStepData, None] = None):
+        observation, info = drone_env.reset()
+        logs_callback.set_init_state(observation, info)
+        terminate = False        
+        while not terminate:
+            # ------------------------- Capture control signal ---------------------------
+            # vel_x, vel_y, rate_yaw, vel_z
+            action = keyboard2action(drone_env.action_limits[1])
+
+            # --------------- Send control signal to env ---------------------------
+            observation, reward, end, truncated, info = drone_env.step(action)
+            terminate = end or truncated
+            # print_state(info)
+            gpos = ", ".join([f"{v:.3f}" for v in info['target_position']])
+            cdist = drone_env.distance2goal(info['position'])
+            gdist = drone_env.goal_distance
+            sys.stdout.write(f"\rR:{reward:.4f}\tGDist: {cdist:.3f} / {gdist:.3f} ({gpos})")
+            sys.stdout.flush()
+
+            if keyboard.is_pressed('space'):
+                terminate = True
+
+            if logs_callback is not None:
+                logs_callback(observation, info)
+
+    try:
         # Instantiate environment
         drone_env = RealCrazyflieEnvContinuous(
             agent_id=8,
@@ -184,8 +205,7 @@ if __name__ == '__main__':
             time_limit_seconds=60,  # 1 min
             max_no_action_seconds=5,  # 5 sec
             frame_skip=6,  # 1 sec
-            goal_threshold=0.5,
-            # init_altitude=0.3,
+            goal_threshold=0.25,
             init_altitude=1.,
             altitude_limits=[0.25, 2.],
             target_pos=2,
@@ -193,8 +213,13 @@ if __name__ == '__main__':
             is_pixels=False,
             zone_steps=10)
 
+        # Summary log_file
+        logs_path = Path(f"./logs_env/{drone_env.__class__.__name__}_" + datetime.datetime.now(
+            ).strftime('%Y-%m-%d_%H-%M-%S') + ".csv" )
+        logs_callback = StoreStepData(logs_path, n_sensors=0, extra_info=False)
+
         for ep in range(episodes):
-            run_episode(drone_env, ep=ep, logs_path=logs_path)
+            run_episode(drone_env, ep=ep, logs_callback=logs_callback)
 
     except Exception as e:
         traceback.print_tb(e.__traceback__)
