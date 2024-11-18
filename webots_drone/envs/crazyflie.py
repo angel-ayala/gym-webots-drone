@@ -152,3 +152,50 @@ class CrazyflieEnvDiscrete(CrazyflieEnvContinuous):
         mapped_action = self.discrete2continuous(action)
 
         return super(CrazyflieEnvDiscrete, self).step(mapped_action)
+
+
+if __name__ == '__main__':
+    import datetime
+    from pathlib import Path
+    from gym import logger
+    import sys
+
+    from webots_drone.cf_simulation import kb2action
+    from webots_drone.data import StoreStepData
+
+    logger.set_level(logger.DEBUG)
+
+    # instantiate environment
+    env = CrazyflieEnvContinuous(time_limit_seconds=600)
+    kb = env.sim.get_kb_capturer()
+
+    # Summary folder
+    folder_name = f"./logs/{env.__class__.__name__}_" + datetime.datetime.now(
+        ).strftime('%Y-%m-%d_%H-%M-%S')
+    folder_name = Path(folder_name)
+    folder_name.mkdir(parents=True)
+
+    logs_callback = StoreStepData(folder_name / 'history.csv', n_sensors=4)
+
+    # run an episode
+    run = True
+    observation, info = env.reset()
+    logs_callback.set_init_state(observation, info)
+    while run:
+        # ------------------------- Capture control signal ---------------------------
+        # vel_x, vel_y, rate_yaw, vel_z
+        action, run, take_shot = kb2action(kb, env.action_limits)
+
+        # --------------- Send control signal to env ---------------------------
+        observation, reward, end, truncated, info = env.step(action)
+        run = not (end or truncated)
+        # print_state(info)
+        gpos = ", ".join([f"{v:.3f}" for v in info['target_position']])
+        cdist = env.distance2goal(info['position'])
+        gdist = env.goal_distance
+        sys.stdout.write(f"\rR:{reward:.4f}\tGDist: {cdist:.3f} / {gdist:.3f} ({gpos})")
+        sys.stdout.flush()
+
+        if logs_callback is not None:
+            logs_callback(observation, info)
+

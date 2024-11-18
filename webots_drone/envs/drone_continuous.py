@@ -137,6 +137,7 @@ class DroneEnvContinuous(gym.Env):
         self._episode_steps = 0  # time limit control
         self._no_action_steps = 0  # no action control
         self._in_zone_steps = 0  # time inside zone control
+        self._risk_zone_steps = 0  # time inside risk zone control
         self._zone_flags = [False, False, False]  # zone control flags
         self._end = False  # episode end flag
         self._prev_distance = 0  # reward helper
@@ -211,11 +212,15 @@ class DroneEnvContinuous(gym.Env):
         return state, state_data
 
     @property
-    def distance_target(self):
-        """Compute the target distance considering the Risk distance, the Goal
-        threshold and the Vehicle's radius."""
-        return self.vtarget.get_risk_distance(self._goal_threshold / 2.) \
-            + self.sim.vehicle_dim[1]
+    def goal_distance(self):
+        """Compute the goal distance considering the Risk distance and half
+        the Goal threshold."""
+        return self.vtarget.get_risk_distance(self._goal_threshold / 2.)
+
+    def distance2goal(self, position):
+        """Compute the current distance to goal considering the Vehicle and
+        Target's radius."""
+        return self.vtarget.get_distance(position)# - self.sim.vehicle_dim[1] - self.vtarget.dimension[1]
 
     def update_no_action_counter(self, position, pos_thr=0.003):
         if len(self.last_info.keys()) == 0:
@@ -233,12 +238,24 @@ class DroneEnvContinuous(gym.Env):
     def update_zone_steps_counter(self):
         if self._zone_flags[1]:  # in-zone
             self._in_zone_steps += 1
+            logger.info(f"InsideGoalZone {self._in_zone_steps:02d} times")
         else:
             self._in_zone_steps = 0
 
     @property
     def zone_steps_limit(self):
         return self._in_zone_steps >= self.zone_steps
+
+    def update_risk_zone_counter(self):
+        if self._zone_flags[0]:  # risk zone
+            self._risk_zone_steps += 1
+            logger.info(f"InsideRiskZone {self._risk_zone_steps:02d} times")
+        else:
+            self._risk_zone_steps = 0
+
+    @property
+    def risk_zone_limit(self):
+        return self._risk_zone_steps > 1
 
     def __is_final_state(self, info):
         is_final = False
@@ -256,7 +273,7 @@ class DroneEnvContinuous(gym.Env):
             logger.info(f"[{info['timestamp']}] Final state, MaxDistance")
             info['final'] = 'MaxDistance'
             is_final = True
-        elif self._zone_flags[0]:
+        elif self.risk_zone_limit:
             logger.info(f"[{info['timestamp']}] Final state, InsideRiskZone")
             info['final'] = 'InsideRiskZone'
             is_final = True
@@ -276,8 +293,7 @@ class DroneEnvContinuous(gym.Env):
         penalization = 0
         penalization_str = ''
         # object_near
-        if any(check_near_object(info["dist_sensors"],
-                                 near_object_threshold)):
+        if any(check_near_object(info["dist_sensors"], near_object_threshold)):
             logger.info(f"[{info['timestamp']}] Penalty state, ObjectNear")
             penalization -= 1.
             penalization_str += 'ObjectNear|'
@@ -303,9 +319,8 @@ class DroneEnvContinuous(gym.Env):
         return penalization
 
     def get_uav_zone(self, position):
-        distance2target = self.vtarget.get_distance(position)
-        zones = check_target_distance(distance2target,
-                                      self.distance_target,
+        zones = check_target_distance(self.distance2goal(position),
+                                      self.goal_distance,
                                       self._goal_threshold)
         return zones
 
@@ -339,7 +354,7 @@ class DroneEnvContinuous(gym.Env):
         # compute reward components
         reward = compute_vector_reward(
             self.vtarget, uav_pos_t, uav_pos_t1, uav_ori_t1,
-            distance_target=self.distance_target,
+            goal_distance=self.goal_distance,
             distance_margin=self._goal_threshold,
             vel_factor=vel_factor, pos_thr=pos_thr)
 
@@ -349,6 +364,7 @@ class DroneEnvContinuous(gym.Env):
         # no action and zone steps update
         self.update_no_action_counter(uav_pos_t1)
         self.update_zone_steps_counter()
+        self.update_risk_zone_counter()
 
         # not terminal, must be avoided
         penalization = self.__compute_penalization(info)

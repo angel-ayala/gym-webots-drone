@@ -34,21 +34,21 @@ def velocity2reward(velocity, pos_thr=0.003, vel_factor=0.035):
 
 
 def compute_vector_reward(vtarget, pos_t, pos_t1, orientation_t1,
-                          distance_target=36., distance_margin=5.,
+                          goal_distance=36., distance_margin=5.,
                           vel_factor=0.035, pos_thr=0.003):
     # compute orientation reward
     ref_orientation = vtarget.get_orientation(pos_t1)
     r_orientation = orientation2reward(orientation_t1, ref_orientation)
     # compute distance reward
     dist_t1 = vtarget.get_distance(pos_t1)
-    r_distance = distance2reward(dist_t1, distance_target)
+    r_distance = distance2reward(dist_t1, goal_distance)
     # compute velocity reward
     dist_t = vtarget.get_distance(pos_t)
     r_velocity = velocity2reward(dist_t - dist_t1, pos_thr, vel_factor)
     # compute velocity reward
     r_height = height2reward(vtarget.get_height_diff(pos_t1))
     # check zones
-    zones = check_target_distance(dist_t1, distance_target, distance_margin)
+    zones = check_target_distance(dist_t1, goal_distance, distance_margin)
     # inverse when trespass risk distance
     if zones[0]:
         r_velocity *= -1.
@@ -172,8 +172,8 @@ if __name__ == '__main__':
     agent_position_range = flight_area[:, 0]  # Example range for x and y coordinates
     plot_all = True
     goal_threshold = 5.
-    distance_target = vtarget.get_risk_distance(goal_threshold / 2.) + vehicle_dim[1]
-    d_central = distance_target - goal_threshold / 2
+    goal_distance = vtarget.get_risk_distance(goal_threshold / 2.) + vehicle_dim[1]
+    d_central = goal_distance - goal_threshold / 2
 
     initial_position = [0, 0, 0]
     # target_orientation = compute_target_orientation(initial_position, target_position)
@@ -181,7 +181,7 @@ if __name__ == '__main__':
 
     # Calculate the reward grid
     x_grid, y_grid, orientation_grid, distance_grid = \
-        calculate_reward_grid(agent_position_range, vtarget, distance_target, target_orientation)
+        calculate_reward_grid(agent_position_range, vtarget, goal_distance, target_orientation)
         # calculate_reward_grid(agent_position_range, target_position, target_orientation)
 
     r_orientation = orientation_grid

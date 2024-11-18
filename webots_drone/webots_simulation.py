@@ -250,6 +250,11 @@ class WebotsSimulation(Supervisor):
         while len(self._data.keys()) == 0:
             self.one_step()
             self.read_data()
+    
+    def get_kb_capturer(self):
+        kb = self.getKeyboard()
+        kb.enable(self.timestep)
+        return kb
 
     def __del__(self):
         """Stop simulation when is destroyed."""
@@ -353,8 +358,7 @@ def run(controller, show=True, action_fn=kb2action, **kwargs):
 
     # keyboard interaction
     print_control_keys()
-    kb = controller.getKeyboard()
-    kb.enable(controller.timestep)
+    kb = controller.get_kb_capturer()
 
     # Start simulation with random FireSmoke position
     goal_threshold = kwargs.get('goal_threshold', 5.)
