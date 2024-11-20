@@ -52,21 +52,14 @@ def compute_vector_reward(vtarget, pos_t, pos_t1, orientation_t1,
     # inverse when trespass risk distance
     if zones[0]:
         r_velocity *= -1.
-    # bonus in-distance
-    r_bonus = 0.
+    # velocity positive when in goal
     if zones[1]:
-        r_bonus = 3.
         r_velocity = compute_distance(pos_t1, pos_t) / vel_factor
-    # penalty no movement
-    elif check_same_position(pos_t, pos_t1):
-        r_bonus -= 2.
-    # if r_velocity < 0.:
-    #     r_velocity = r_velocity / 2.
 
     # compose reward
     r_velocity = r_velocity * r_orientation  # [-1, 1]
     r_pose = r_distance + r_orientation - 1  # ]-inf, 0]
-    r_sum = r_velocity + r_height + r_pose * 0.1 + r_bonus
+    r_sum = r_velocity + r_height + r_pose * 0.1
     return r_sum
 
 

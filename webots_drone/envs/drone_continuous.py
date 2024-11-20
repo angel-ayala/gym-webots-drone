@@ -229,6 +229,7 @@ class DroneEnvContinuous(gym.Env):
         if check_same_position(position, self.last_info['position'],
                                thr=pos_thr) and not self._zone_flags[1]:
             self._no_action_steps += 1
+            logger.info(f"SamePosition {self._no_action_steps:02d} times")
         else:
             self._no_action_steps = 0
 
@@ -323,6 +324,10 @@ class DroneEnvContinuous(gym.Env):
             logger.info(f"[{info['timestamp']}] Penalty state, OutFlightArea")
             penalization -= 2.
             penalization_str = 'OutFlightArea|'
+        if self._no_action_steps > 0:
+            logger.info(f"[{info['timestamp']}] Penalty state, SamePosition")
+            penalization -= 2.
+            penalization_str = 'SamePosition|'
         # risk zone trespassing
         if self._zone_flags[0]:
             logger.info(f"[{info['timestamp']}] Penalty state, InsideRiskZone")
@@ -333,6 +338,20 @@ class DroneEnvContinuous(gym.Env):
             info['penalization'] = penalization_str
 
         return penalization
+
+    def __compute_bonus(self, info):
+        bonus = 0
+        bonus_str = ''
+        # in-zone bonus
+        if self._zone_flags[1] and self._out_area_steps == 0:
+            logger.info(f"[{info['timestamp']}] Bonus state, InsideGoalZone")
+            bonus += 5. * (self._in_zone_steps / self.zone_steps)
+            bonus_str += 'InsideGoalZone|'
+
+        if len(bonus_str) > 0:
+            info['bonus'] = bonus_str
+
+        return bonus
 
     def get_uav_zone(self, position):
         zones = check_target_distance(self.distance2goal(position),
@@ -352,6 +371,7 @@ class DroneEnvContinuous(gym.Env):
         :param float distance_threshold: Indicate the acceptable distance
             margin before the fire's risk zone.
         """
+        info['bonus'] = 'no'
         info['penalization'] = 'no'
         info['final'] = 'no'
 
@@ -384,9 +404,9 @@ class DroneEnvContinuous(gym.Env):
         self.update_out_area_counter(uav_pos_t1)
 
         # not terminal, must be avoided
-        penalization = self.__compute_penalization(info)
-        if penalization < 0:
-            reward += penalization
+        reward += self.__compute_penalization(info)
+        # must be encouraged
+        reward += self.__compute_bonus(info)
 
         return reward
 

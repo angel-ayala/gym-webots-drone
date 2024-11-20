@@ -125,7 +125,8 @@ class MultipleCallbacksOnStep:
 class StoreStepData:
     """Callback for save a Gym.state data."""
 
-    def __init__(self, store_path, n_sensors=9, epsilon=False, extra_info=True):
+    def __init__(self, store_path, n_sensors=9, epsilon=False, extra_info=True,
+                 other_cols=None):
         self.store_path = Path(store_path)
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
         self.n_sensors = n_sensors
@@ -134,6 +135,7 @@ class StoreStepData:
         self._ep = 0
         self._iteration = -1
         self.extra_info = extra_info
+        self.other_cols = other_cols
         if self.store_path.is_file():
             print('WARNING:', self.store_path, 'already exists, adding data!')
             self._iteration = find_last_iteration(self.store_path)
@@ -171,7 +173,7 @@ class StoreStepData:
 
         if self.epsilon is not False:
             data_cols += ['epsilon']
-        data_cols += ['penalization', 'final']
+        data_cols += ['penalization', 'bonus', 'final']
 
         for nid in range(self.n_sensors):
             data_cols += ['dist_sensor_' + str(nid)]
@@ -194,6 +196,9 @@ class StoreStepData:
                           'motors_vel_front_right',
                           'motors_vel_rear_left',
                           'motors_vel_rear_right']
+        if self.other_cols is not None:
+            data_cols += self.other_cols
+
         # create file headers
         with open(self.store_path, 'w') as outfile:
             outfile.writelines(','.join(data_cols) + '\n')
@@ -218,6 +223,7 @@ class StoreStepData:
             row.append(self.epsilon())  # epsilon
 
         row.append(info['penalization'])
+        row.append(info['bonus'])
         row.append(info['final'])
 
         for nid in range(self.n_sensors):
@@ -231,6 +237,10 @@ class StoreStepData:
             row.extend(info['emitter']['direction'])
             row.append(info['emitter']['signal_strength'])
             row.extend(info['motors_vel'])
+
+        if self.other_cols is not None:
+            for c in self.other_cols:
+                row.append(info[c])
 
         # append data
         with open(self.store_path, 'a') as outfile:
