@@ -29,7 +29,7 @@ def height2reward(height_diff):
 
 def velocity2reward(velocity, pos_thr=0.003, vel_factor=0.035):
     dist_diff = velocity
-    dist_diff *= np.abs(velocity).round(3) > pos_thr  # ensure minimum diff
+    dist_diff *= np.abs(velocity).round(4) > pos_thr  # ensure minimum diff
     return dist_diff / vel_factor
 
 

@@ -308,48 +308,51 @@ class DroneEnvContinuous(gym.Env):
                                  150 / 2200,  # down back
                                  30 / 800]  # top
         penalization = 0
-        penalization_str = ''
+        penalization_str = []
         # object_near
         if any(check_near_object(info["dist_sensors"], near_object_threshold)):
             logger.info(f"[{info['timestamp']}] Penalty state, ObjectNear")
             penalization -= 1.
-            penalization_str += 'ObjectNear|'
+            penalization_str.append('ObjectNear')
         # is_collision
         if any(check_collision(info["dist_sensors"])):
             logger.info(f"[{info['timestamp']}] Penalty state, Near2Collision")
             penalization -= 2.
-            penalization_str += 'Near2Collision|'
+            penalization_str.append('Near2Collision')
         # outside flight area
         if self._out_area_steps > 0:
             logger.info(f"[{info['timestamp']}] Penalty state, OutFlightArea")
             penalization -= 2.
-            penalization_str = 'OutFlightArea|'
+            penalization_str.append('OutFlightArea')
+        # no movement
         if self._no_action_steps > 0:
             logger.info(f"[{info['timestamp']}] Penalty state, SamePosition")
             penalization -= 2.
-            penalization_str = 'SamePosition|'
+            penalization_str.append('SamePosition')
         # risk zone trespassing
         if self._zone_flags[0]:
             logger.info(f"[{info['timestamp']}] Penalty state, InsideRiskZone")
             penalization -= 2.
-            penalization_str += 'InsideRiskZone|'
+            penalization_str.append('InsideRiskZone')
 
         if len(penalization_str) > 0:
-            info['penalization'] = penalization_str
+            info['penalization'] = "|".join(penalization_str)
 
         return penalization
 
     def __compute_bonus(self, info):
         bonus = 0
-        bonus_str = ''
+        bonus_str = []
         # in-zone bonus
         if self._zone_flags[1] and self._out_area_steps == 0:
             logger.info(f"[{info['timestamp']}] Bonus state, InsideGoalZone")
-            bonus += 5. * (self._in_zone_steps / self.zone_steps)
-            bonus_str += 'InsideGoalZone|'
+            steps_factor = self._in_zone_steps / self.zone_steps
+            h_factor = 1 - abs(self.vtarget.get_height_diff(info['position']))
+            bonus += 5. * max(0, h_factor) * steps_factor
+            bonus_str.append('InsideGoalZone')
 
         if len(bonus_str) > 0:
-            info['bonus'] = bonus_str
+            info['bonus'] = "|".join(bonus_str)
 
         return bonus
 
