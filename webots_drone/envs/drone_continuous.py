@@ -289,6 +289,10 @@ class DroneEnvContinuous(gym.Env):
             logger.info(f"[{info['timestamp']}] Final state, InsideRiskZone")
             info['final'] = 'InsideRiskZone'
             is_final = True
+        elif self.out_area_limit:
+            logger.info(f"[{info['timestamp']}] Final state, OutFlightArea")
+            info['final'] = 'OutFlightArea'
+            is_final = True
 
         return is_final
 
