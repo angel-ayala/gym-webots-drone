@@ -105,15 +105,37 @@ class VirtualTarget:
         return compute_distance(reference, target_pos)
 
     def get_orientation(self, reference):
+        """Compute the angle between the reference and the target."""
         angle = compute_orientation(reference, self.position)
         angle = angle_inverse(angle_90deg_offset(angle))
         return angle
 
     def get_height_diff(self, reference):
+        """Compute the height difference between the reference and the target."""
         if self.is_3d:
-            return self.position[2] - reference[2]
+            return (self.position[2] - reference[2]).round(4)
         else:
             return 0.
+
+    def get_elevation_angle(self, reference, norm=False):
+        """Compute the levation angle between the reference and the target."""
+        # horizontal distance
+        h_dist = compute_distance(self.position[:2], reference[:2])
+        # vertical difference
+        delta_z = self.get_height_diff(reference)
+        # elevation angle
+        angle = np.arctan2(delta_z, h_dist)
+        if norm:
+            angle /= np.pi / 2
+        return angle
+
+    def get_orientation_diff(self, ref_position, ref_orientation, norm=False):
+        """Compute the angle difference between the reference and the target."""
+        orientation = self.get_orientation(ref_position)
+        diff_angle = ref_orientation - orientation
+        if norm:
+            diff_angle = np.cos(diff_angle)
+        return diff_angle
 
     def get_risk_distance(self, threshold=0.):
         return self.risk_distance + threshold

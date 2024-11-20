@@ -11,6 +11,8 @@ import numpy as np
 from gym import spaces, logger
 from gym.utils import seeding
 
+from webots_drone.reward import orientation2reward
+from webots_drone.reward import elevation2reward
 from webots_drone.reward import compute_vector_reward
 from webots_drone.reward import compute_visual_reward
 from webots_drone.utils import compute_distance
@@ -347,8 +349,11 @@ class DroneEnvContinuous(gym.Env):
         if self._zone_flags[1] and self._out_area_steps == 0:
             logger.info(f"[{info['timestamp']}] Bonus state, InsideGoalZone")
             steps_factor = self._in_zone_steps / self.zone_steps
-            h_factor = 1 - abs(self.vtarget.get_height_diff(info['position']))
-            bonus += 5. * max(0, h_factor) * steps_factor
+            o_factor = orientation2reward(self.vtarget.get_orientation_diff(
+                info['position'], info['north_rad'], norm=True))
+            h_factor = elevation2reward(
+                self.vtarget.get_elevation_angle(info['position'], norm=True))
+            bonus += 3. * o_factor * h_factor * steps_factor
             bonus_str.append('InsideGoalZone')
 
         if len(bonus_str) > 0:

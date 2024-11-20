@@ -15,16 +15,16 @@ from webots_drone.utils import min_max_norm
 from webots_drone.utils import target_mask
 
 
-def orientation2reward(orientation, ref_orientation):
-    return (np.cos(ref_orientation - orientation) + 1.) / 2.
+def orientation2reward(orientation_diff):
+    return (orientation_diff + 1.) / 2.
 
 
 def distance2reward(distance, ref_distance):
     return - abs(1. - distance / ref_distance)
 
 
-def height2reward(height_diff):
-    return - abs(height_diff)
+def elevation2reward(elevation_angle):
+    return 1 - abs(elevation_angle)
 
 
 def velocity2reward(velocity, pos_thr=0.003, vel_factor=0.035):
@@ -37,8 +37,8 @@ def compute_vector_reward(vtarget, pos_t, pos_t1, orientation_t1,
                           goal_distance=36., distance_margin=5.,
                           vel_factor=0.035, pos_thr=0.003):
     # compute orientation reward
-    ref_orientation = vtarget.get_orientation(pos_t1)
-    r_orientation = orientation2reward(orientation_t1, ref_orientation)
+    r_orientation = orientation2reward(
+        vtarget.get_orientation_diff(pos_t1, orientation_t1, norm=True))
     # compute distance reward
     dist_t1 = vtarget.get_distance(pos_t1)
     r_distance = distance2reward(dist_t1, goal_distance)
@@ -46,7 +46,7 @@ def compute_vector_reward(vtarget, pos_t, pos_t1, orientation_t1,
     dist_t = vtarget.get_distance(pos_t)
     r_velocity = velocity2reward(dist_t - dist_t1, pos_thr, vel_factor)
     # compute velocity reward
-    r_height = height2reward(vtarget.get_height_diff(pos_t1))
+    r_elevation = elevation2reward(vtarget.get_elevation_angle(pos_t1, True))
     # check zones
     zones = check_target_distance(dist_t1, goal_distance, distance_margin)
     # inverse when trespass risk distance
@@ -57,9 +57,9 @@ def compute_vector_reward(vtarget, pos_t, pos_t1, orientation_t1,
         r_velocity = compute_distance(pos_t1, pos_t) / vel_factor
 
     # compose reward
-    r_velocity = r_velocity * r_orientation  # [-1, 1]
-    r_pose = r_distance + r_orientation - 1  # ]-inf, 0]
-    r_sum = r_velocity + r_height + r_pose * 0.1
+    r_velocity = r_velocity * r_orientation * r_elevation  # [-1, 1]
+    r_pose = r_distance + (r_orientation - 1) + (r_elevation - 1)  # ]-inf, 0]
+    r_sum = r_velocity + r_pose * 0.1
     return r_sum
 
 
