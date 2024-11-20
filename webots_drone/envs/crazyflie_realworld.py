@@ -61,7 +61,7 @@ class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
         self.sim = CrazyflieEnvironment(agent_id=self.agent_id,
                                         init_height=self.init_altitude,
                                         timestep=self.timestep,
-                                        flight_area=visible_area)
+                                        visible_area=visible_area)
         logger.info(f"Connected to {self.sim.drone}")
 
     def create_target(self, dimension=None):
@@ -106,8 +106,8 @@ class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
 
         if self.sim.drone.is_low_battery:
             logger.info(f"[{info['timestamp']}] Final state, Low Battery")
+            info['final'] = 'LowBattery'
             truncated = True
-            info['final'] = 'low_battery'
 
         return observation, reward, end, truncated, info
 

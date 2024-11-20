@@ -138,6 +138,7 @@ class DroneEnvContinuous(gym.Env):
         self._no_action_steps = 0  # no action control
         self._in_zone_steps = 0  # time inside zone control
         self._risk_zone_steps = 0  # time inside risk zone control
+        self._out_area_steps = 0  # time outside flight area control
         self._zone_flags = [False, False, False]  # zone control flags
         self._end = False  # episode end flag
         self._prev_distance = 0  # reward helper
@@ -236,7 +237,7 @@ class DroneEnvContinuous(gym.Env):
         return self._no_action_steps >= self._max_no_action_steps
 
     def update_zone_steps_counter(self):
-        if self._zone_flags[1]:  # in-zone
+        if self._zone_flags[1] and self._out_area_steps == 0:  # in-zone
             self._in_zone_steps += 1
             logger.info(f"InsideGoalZone {self._in_zone_steps:02d} times")
         else:
@@ -256,6 +257,17 @@ class DroneEnvContinuous(gym.Env):
     @property
     def risk_zone_limit(self):
         return self._risk_zone_steps > 1
+
+    def update_out_area_counter(self, position):
+        if any(check_flight_area(position, self.flight_area)):
+            self._out_area_steps += 1
+            logger.info(f"OutFlightArea {self._out_area_steps:02d} times")
+        else:
+            self._out_area_steps = 0
+
+    @property
+    def out_area_limit(self):
+        return self._out_area_steps > 1
 
     def __is_final_state(self, info):
         is_final = False
@@ -303,7 +315,7 @@ class DroneEnvContinuous(gym.Env):
             penalization -= 2.
             penalization_str += 'Near2Collision|'
         # outside flight area
-        if any(check_flight_area(info["position"], self.flight_area)):
+        if self._out_area_steps > 0:
             logger.info(f"[{info['timestamp']}] Penalty state, OutFlightArea")
             penalization -= 2.
             penalization_str = 'OutFlightArea|'
@@ -365,6 +377,7 @@ class DroneEnvContinuous(gym.Env):
         self.update_no_action_counter(uav_pos_t1)
         self.update_zone_steps_counter()
         self.update_risk_zone_counter()
+        self.update_out_area_counter(uav_pos_t1)
 
         # not terminal, must be avoided
         penalization = self.__compute_penalization(info)

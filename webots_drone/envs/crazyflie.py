@@ -57,6 +57,8 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
         # adjust z-axis
         target_area[0, 2] += 0.25
         target_area[1, 2] -= 0.45
+        # ensure correct coputation by rounding values again
+        target_area = target_area.round(2)
         # compute quadrants coordinates
         area = np.linspace(target_area[0], target_area[1], 3)
         area_points = []

@@ -96,6 +96,20 @@ def apply_phase(history_df, args_path):
     return history_df
 
 
+def find_last_iteration(csv_file):
+    import os
+
+    with open(csv_file, 'rb') as f:
+        try:  # catch OSError in case of a one line file 
+            f.seek(-2, os.SEEK_END)
+            while f.read(1) != b'\n':
+                f.seek(-2, os.SEEK_CUR)
+        except OSError:
+            f.seek(0)
+        last_line = f.readline().decode()
+    return int(last_line.split(',')[2])
+
+
 class MultipleCallbacksOnStep:
     def __init__(self):
         self._callbacks = list()
@@ -114,15 +128,17 @@ class StoreStepData:
     def __init__(self, store_path, n_sensors=9, epsilon=False, extra_info=True):
         self.store_path = Path(store_path)
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
-        if self.store_path.is_file():
-            print('WARNING:', self.store_path, 'already exists, overwriting!')
         self.n_sensors = n_sensors
         self.epsilon = epsilon
         self._phase = 'init'
         self._ep = 0
         self._iteration = -1
         self.extra_info = extra_info
-        self.create_header()
+        if self.store_path.is_file():
+            print('WARNING:', self.store_path, 'already exists, adding data!')
+            self._iteration = find_last_iteration(self.store_path)
+        else:
+            self.create_header()
 
     def set_init_state(self, state, info):
         self.last_state = info2state(info).tolist()
@@ -238,8 +254,15 @@ class ExperimentData:
         self.agent_params = read_args(self.experiment_path / agent_args)
         # append evaluation results
         self.join_eval_data()
-        self.quadrants = self.get_target_quadrants()
         self.set_quadrants()
+
+    @property
+    def quadrants(self):
+        return self.env_params["target_quadrants"]
+
+    @property
+    def flight_area(self):
+        return self.env_params["flight_area"]
 
     def join_eval_data(self, csv_regex=r'history_eval_*.csv'):
         csv_paths = list(self.experiment_path.rglob(csv_regex))
@@ -294,41 +317,9 @@ class ExperimentData:
 
         return reward_values
 
-    def get_flight_area(self, world_name='forest_tower_200x200_simple'):
-        import webots_drone
-
-        with open(Path(webots_drone.__path__[0] +
-                       f"/../worlds/{world_name}.wbt"), 'r') as world_dump:
-            world_file = world_dump.read()
-
-        area_size_regex = re.search(
-            r"DEF FlightArea(.*\n)+  size( \-?\d+\.?\d?){2}\n",
-            world_file)
-        area_size_str = area_size_regex.group().strip()
-        area_size = list(map(float, area_size_str.split(' ')[-2:]))
-
-        area_size = [fs / 2 for fs in area_size]  # size from center
-        flight_area = [[fs * -1 for fs in area_size], area_size]
-
-        # add altitude limits
-        flight_area[0].append(self.env_params['altitude_limits'][0])
-        flight_area[1].append(self.env_params['altitude_limits'][1])
-
-        return flight_area
-
-    def get_target_quadrants(self):
-        flight_area = self.get_flight_area()
-        quadrants = np.array(
-            [(flight_area[0][0], flight_area[1][1]),
-             (flight_area[1][0], flight_area[1][1]),
-             (flight_area[1][0], flight_area[0][1]),
-             (flight_area[0][0], flight_area[0][1])])
-        quadrants /= 2.
-        return quadrants
-
     def target_pos2quadrant(self, target_pos):
         target_pos = np.asarray(target_pos)
-        return (self.quadrants == target_pos[:2]).sum(axis=1).argmax()
+        return (self.quadrants == target_pos).sum(axis=1).argmax()
 
     def set_quadrants(self):
         target_quadrant = self.history_df.groupby(
@@ -473,7 +464,7 @@ class ExperimentData:
             state_data.append('RGB')
         if self.env_params['is_vector']:
             state_data.extend(self.env_params['uav_data'])
-        for extra_key in ['target_pos', 'target_dist', 'target_dim',
+        for extra_key in ['target_pos2obs', 'target_dist2obs', 'target_dim2obs',
                           'action2obs']:
             if self.env_params[extra_key]:
                 state_data.append(extra_key)
@@ -488,7 +479,7 @@ class ExperimentData:
             data_path=self.experiment_path,
             mode=env_mode,
             is_srl=self.agent_params['is_srl'],
-            fix_target_pos=self.env_params['fire_pos'] is not None,
+            fix_target_pos=self.env_params['target_pos'] is not None,
             state_data=state_data,
             seed=self.train_params['seed']
             # epsilon=(self.agent_params["epsilon_start"],
@@ -568,7 +559,8 @@ class VideoCallback:
     def is_ready(self):
         return self.env_sim.movieIsReady()
 
-    def start_recording(self, vid_path):
+    def start_recording(self, vid_name):
+        vid_path = self.store_path / vid_name
         if vid_path.is_file():
             print('WARNING:', vid_path, 'already exists, overwriting!')
 
