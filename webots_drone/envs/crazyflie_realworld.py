@@ -67,7 +67,7 @@ class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
     def create_target(self, dimension=None):
         # virtualTarget
         from webots_drone.target import VirtualTarget
-        return VirtualTarget(dimension=dimension, is_3d=True, north_offset=False)
+        return VirtualTarget(dimension=dimension, is_3d=True)
 
     def get_state(self):
         """Process the environment to get a state."""
@@ -115,7 +115,7 @@ class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
         # invert yaw rate
         vel_x, vel_y, yaw_rate, vel_z = action
         action = [vel_x, vel_y, -yaw_rate, vel_z]
-        return super().constrained_action(action, info)
+        return super().constraint_action(action, info)
 
     def close(self):
         super().close()
