@@ -307,7 +307,6 @@ def constrained_action(action, position, north_rad, flight_area, is_vel=False):
         altitude = 0.
 
     if is_vel:
-        roll_angle = -roll_angle
-        return pitch_angle, roll_angle, yaw_angle, altitude
+        return pitch_angle, -roll_angle, yaw_angle, altitude
     else:
         return roll_angle, pitch_angle, yaw_angle, altitude

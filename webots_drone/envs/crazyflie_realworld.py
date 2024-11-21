@@ -67,7 +67,7 @@ class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
     def create_target(self, dimension=None):
         # virtualTarget
         from webots_drone.target import VirtualTarget
-        return VirtualTarget(dimension=dimension, is_3d=True)
+        return VirtualTarget(dimension=dimension, is_3d=True, north_offset=False)
 
     def get_state(self):
         """Process the environment to get a state."""
@@ -111,6 +111,12 @@ class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
 
         return observation, reward, end, truncated, info
 
+    def constraint_action(self, action, info):
+        # invert yaw rate
+        vel_x, vel_y, yaw_rate, vel_z = action
+        action = [vel_x, vel_y, -yaw_rate, vel_z]
+        return super().constrained_action(action, info)
+
     def close(self):
         super().close()
         self.sim.close()
@@ -146,23 +152,23 @@ if __name__ == '__main__':
     def keyboard2action(att_values):
         action_cmd = [0] * 4
 
-        # Roll
-        if keyboard.is_pressed('right'):
-            action_cmd[0] = att_values[0]
-        if keyboard.is_pressed('left'):
-            action_cmd[0] = -att_values[0]
-
-        # Pitch
+        # vel_x
         if keyboard.is_pressed('up'):
-            action_cmd[1] = att_values[1]
+            action_cmd[0] = att_values[1]
         if keyboard.is_pressed('down'):
-            action_cmd[1] = -att_values[1]
+            action_cmd[0] = -att_values[1]
+
+        # vel_y
+        if keyboard.is_pressed('left'):
+            action_cmd[1] = att_values[0]
+        if keyboard.is_pressed('right'):
+            action_cmd[1] = -att_values[0]
 
         # Yaw
         if keyboard.is_pressed('D'):
-            action_cmd[2] = att_values[2]
-        if keyboard.is_pressed('A'):
             action_cmd[2] = -att_values[2]
+        if keyboard.is_pressed('A'):
+            action_cmd[2] = att_values[2]
 
         # Height
         if keyboard.is_pressed('W'):
@@ -175,7 +181,7 @@ if __name__ == '__main__':
     def run_episode(drone_env: RealCrazyflieEnvContinuous, ep: int = 0, logs_callback: Union[StoreStepData, None] = None):
         observation, info = drone_env.reset()
         logs_callback.set_init_state(observation, info)
-        terminate = False        
+        terminate = False
         while not terminate:
             # ------------------------- Capture control signal ---------------------------
             # vel_x, vel_y, rate_yaw, vel_z

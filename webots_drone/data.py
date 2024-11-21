@@ -274,7 +274,7 @@ class ExperimentData:
     def flight_area(self):
         return self.env_params["flight_area"]
 
-    def join_eval_data(self, csv_regex=r'history_eval_*.csv'):
+    def join_eval_data(self, csv_regex=r'eval*/history_*.csv'):
         csv_paths = list(self.experiment_path.rglob(csv_regex))
         csv_paths.sort()
         eval_df = None

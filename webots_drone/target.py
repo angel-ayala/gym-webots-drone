@@ -16,14 +16,15 @@ from webots_drone.utils import compute_risk_distance
 
 
 class VirtualTarget:
-    def __init__(self, dimension=[None, None], webots_node=None,
-                 height_range=[2., 13.], radius_range=[.5, 3.], is_3d=False):
+    def __init__(self, dimension=[None, None], webots_node=None, is_3d=False,
+                 north_offset=True, height_range=[2., 13.], radius_range=[.5, 3.]):
         self.size_range = [height_range, radius_range]
         self.position = [0, 0, 0]
+        self.is_3d = is_3d
+        self.north_offset = north_offset
 
         # first check if is in a Webots simulation
         self.node = webots_node
-        self.is_3d = is_3d
         self.set_dimension(*dimension)
         self.seed()
 
@@ -107,7 +108,8 @@ class VirtualTarget:
     def get_orientation(self, reference):
         """Compute the angle between the reference and the target."""
         angle = compute_orientation(reference, self.position)
-        angle = angle_inverse(angle_90deg_offset(angle))
+        if self.north_offset:
+            angle = angle_inverse(angle_90deg_offset(angle))
         return angle
 
     def get_height_diff(self, reference):

@@ -100,7 +100,7 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
         vtarget.is_3d = True
         return vtarget
 
-    def update_no_action_counter(self, position, pos_thr=0.0001):
+    def update_no_action_counter(self, position, pos_thr=0.003):
         return super().update_no_action_counter(position, pos_thr)
 
     def constraint_action(self, action, info):
