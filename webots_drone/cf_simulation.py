@@ -123,7 +123,7 @@ if __name__ == '__main__':
         'height_limits': [.25, 2.25],
         'frame_skip': 6,
         'vel_factor': 0.02,
-        'pos_thr': 0.0001,
+        'pos_thr': 0.003,
         'is_3d': True,
         'init_height': 0.3,
         'is_vel_control': True

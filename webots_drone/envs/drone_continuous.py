@@ -171,7 +171,7 @@ class DroneEnvContinuous(gym.Env):
     def set_target(self, position=None, dimension=None):
         # update position
         tpos = self._target_pos if position is None else position
-        if type(tpos) is int or tpos is None:
+        if isinstance(tpos, (int, np.integer, type(None))):
             tpos = self.get_target_quadrant(tpos)
 
         # ensure fire position inside the flight_area

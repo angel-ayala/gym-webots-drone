@@ -73,7 +73,7 @@ class VirtualTarget:
             Z_range = [area[0, 2] + half_height, area[1, 2] - half_height]
             random_pos[2] = self.np_random.uniform(*Z_range)
 
-        return random_pos
+        return np.round(random_pos, 2)
 
     def set_position(self, position):
         """
