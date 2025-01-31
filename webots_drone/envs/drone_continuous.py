@@ -412,7 +412,7 @@ class DroneEnvContinuous(gym.Env):
         #     reward += compute_visual_reward(obs)
 
         # must be encouraged
-        reward += self.__compute_bonus(info)
+        # reward += self.__compute_bonus(info)
 
         return reward
 
