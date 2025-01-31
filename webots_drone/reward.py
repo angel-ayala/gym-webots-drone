@@ -30,7 +30,7 @@ def elevation2reward(elevation_angle):
 def velocity2reward(velocity, pos_thr=0.003, vel_factor=0.035):
     dist_diff = velocity
     dist_diff *= np.abs(velocity).round(4) > pos_thr  # ensure minimum diff
-    return dist_diff / vel_factor
+    return np.clip(dist_diff / vel_factor, -1, 1)
 
 
 def compute_vector_reward(vtarget, pos_t, pos_t1, orientation_t1,
@@ -54,7 +54,10 @@ def compute_vector_reward(vtarget, pos_t, pos_t1, orientation_t1,
         r_velocity *= -1.
     # velocity positive when in goal
     if zones[1]:
-        r_velocity = compute_distance(pos_t1, pos_t) / vel_factor
+        dist_t_factor = 1 + distance2reward(dist_t, goal_distance)
+        dist_t1_factor = 1 + distance2reward(dist_t1, goal_distance)
+        move_factor = check_same_position(pos_t, pos_t1, pos_thr)
+        r_velocity = dist_t_factor * dist_t1_factor * move_factor
 
     # compose reward
     r_velocity = r_velocity * r_orientation * r_elevation  # [-1, 1]

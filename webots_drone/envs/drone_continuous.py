@@ -13,6 +13,7 @@ from gym.utils import seeding
 
 from webots_drone.reward import orientation2reward
 from webots_drone.reward import elevation2reward
+from webots_drone.reward import distance2reward
 from webots_drone.reward import compute_vector_reward
 from webots_drone.reward import compute_visual_reward
 from webots_drone.utils import compute_distance
@@ -225,11 +226,10 @@ class DroneEnvContinuous(gym.Env):
         Target's radius."""
         return self.vtarget.get_distance(position)# - self.sim.vehicle_dim[1] - self.vtarget.dimension[1]
 
-    def update_no_action_counter(self, position, pos_thr=0.003):
+    def update_no_action_counter(self, pos_t, pos_t1, pos_thr=0.003):
         if len(self.last_info.keys()) == 0:
             return False
-        if check_same_position(position, self.last_info['position'],
-                               thr=pos_thr) and not self._zone_flags[1]:
+        if check_same_position(pos_t, pos_t1, thr=pos_thr) and not self._zone_flags[1]:
             self._no_action_steps += 1
             logger.info(f"SamePosition {self._no_action_steps:02d} times")
         else:
@@ -238,17 +238,6 @@ class DroneEnvContinuous(gym.Env):
     @property
     def no_action_limit(self):
         return self._no_action_steps >= self._max_no_action_steps
-
-    def update_zone_steps_counter(self):
-        if self._zone_flags[1] and self._out_area_steps == 0:  # in-zone
-            self._in_zone_steps += 1
-            logger.info(f"InsideGoalZone {self._in_zone_steps:02d} times")
-        else:
-            self._in_zone_steps = 0
-
-    @property
-    def zone_steps_limit(self):
-        return self._in_zone_steps >= self.zone_steps
 
     def update_risk_zone_counter(self):
         if self._zone_flags[0]:  # risk zone
@@ -347,19 +336,26 @@ class DroneEnvContinuous(gym.Env):
         bonus_str = []
         # in-zone bonus
         if self._zone_flags[1] and self._out_area_steps == 0:
-            logger.info(f"[{info['timestamp']}] Bonus state, InsideGoalZone")
-            steps_factor = self._in_zone_steps / self.zone_steps
-            o_factor = orientation2reward(self.vtarget.get_orientation_diff(
-                info['position'], info['north_rad'], norm=True))
-            h_factor = elevation2reward(
-                self.vtarget.get_elevation_angle(info['position'], norm=True))
-            bonus += 3. * o_factor * h_factor * steps_factor
+            bonus = 1.
             bonus_str.append('InsideGoalZone')
+            logger.info(f"[{info['timestamp']}] Bonus state, InsideGoalZone")
 
         if len(bonus_str) > 0:
             info['bonus'] = "|".join(bonus_str)
 
         return bonus
+
+    def is_goal_state(self, info):
+        if self._zone_flags[1] and self._out_area_steps == 0:
+            d_goal = 1 + distance2reward(
+                self.distance2goal(info['position']), self.goal_distance)
+            o_goal = orientation2reward(self.vtarget.get_orientation_diff(
+                info['position'], info['north_rad'], norm=True))
+            e_goal = elevation2reward(
+                self.vtarget.get_elevation_angle(info['position'], norm=True))
+            return (d_goal * o_goal * e_goal) == 1.
+        else:
+            return False
 
     def get_uav_zone(self, position):
         zones = check_target_distance(self.distance2goal(position),
@@ -395,6 +391,16 @@ class DroneEnvContinuous(gym.Env):
         if not is_3d:
             uav_pos_t[2] = uav_pos_t1[2] = self.vtarget.position[2]
 
+        # no action and zone steps update
+        self.update_no_action_counter(uav_pos_t1)
+        self.update_risk_zone_counter()
+        self.update_out_area_counter(uav_pos_t1)
+
+        # not terminal, must be avoided
+        penalty = self.__compute_penalization(info)
+        if penalty < 0:
+            return penalty
+
         # compute reward components
         reward = compute_vector_reward(
             self.vtarget, uav_pos_t, uav_pos_t1, uav_ori_t1,
@@ -405,14 +411,6 @@ class DroneEnvContinuous(gym.Env):
         # if self.is_pixels:
         #     reward += compute_visual_reward(obs)
 
-        # no action and zone steps update
-        self.update_no_action_counter(uav_pos_t1)
-        self.update_zone_steps_counter()
-        self.update_risk_zone_counter()
-        self.update_out_area_counter(uav_pos_t1)
-
-        # not terminal, must be avoided
-        reward += self.__compute_penalization(info)
         # must be encouraged
         reward += self.__compute_bonus(info)
 
@@ -480,13 +478,14 @@ class DroneEnvContinuous(gym.Env):
 
         # timeout limit
         if self.__time_limit():
-            logger.info(f"[{info['timestamp']}] Final state, Time limit")
             truncated = True
+            logger.info(f"[{info['timestamp']}] Final state, Time limit")
             info['final'] = 'TimeLimit'
         # goal state
-        if self.zone_steps_limit:
-            logger.info(f"[{info['timestamp']}] Final state, Goal reached")
+        if self.is_goal_state(info):
+            reward += 10.
             truncated = True
+            logger.info(f"[{info['timestamp']}] Final state, Goal reached")
             info['final'] = 'GoalFound'
 
         # penalize end states
