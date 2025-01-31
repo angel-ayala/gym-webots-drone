@@ -353,7 +353,7 @@ class DroneEnvContinuous(gym.Env):
                 info['position'], info['north_rad'], norm=True))
             e_goal = elevation2reward(
                 self.vtarget.get_elevation_angle(info['position'], norm=True))
-            return (d_goal * o_goal * e_goal) == 1.
+            return (d_goal * o_goal * e_goal) > .99
         else:
             return False
 
