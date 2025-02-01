@@ -56,7 +56,7 @@ def compute_vector_reward(vtarget, pos_t, pos_t1, orientation_t1,
     if zones[1]:
         dist_t_factor = 1 + distance2reward(dist_t, goal_distance)
         dist_t1_factor = 1 + distance2reward(dist_t1, goal_distance)
-        move_factor = check_same_position(pos_t, pos_t1, pos_thr)
+        move_factor = 1 - check_same_position(pos_t, pos_t1, pos_thr)
         r_velocity = dist_t_factor * dist_t1_factor * move_factor
 
     # compose reward

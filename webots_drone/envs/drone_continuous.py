@@ -76,10 +76,10 @@ class DroneEnvContinuous(gym.Env):
                                                 dtype=self.obs_type)
         # runtime vars
         self.init_runtime_vars()
-        self._max_episode_steps = seconds2steps(time_limit_seconds, frame_skip,
+        self._max_episode_steps = seconds2steps(time_limit_seconds, 1,
                                                 self.sim.timestep)
-        self._max_no_action_steps = seconds2steps(
-            max_no_action_seconds, frame_skip, self.sim.timestep)
+        self._max_no_action_steps = seconds2steps(max_no_action_seconds, 1,
+                                                  self.sim.timestep)
         self.set_reaction_intervals(frame_skip)
 
         self._goal_threshold = goal_threshold
@@ -224,14 +224,14 @@ class DroneEnvContinuous(gym.Env):
     def distance2goal(self, position):
         """Compute the current distance to goal considering the Vehicle and
         Target's radius."""
-        return self.vtarget.get_distance(position)# - self.sim.vehicle_dim[1] - self.vtarget.dimension[1]
+        return self.vtarget.get_distance(position)
 
-    def update_no_action_counter(self, pos_t, pos_t1, pos_thr=0.003):
-        if len(self.last_info.keys()) == 0:
-            return False
-        if check_same_position(pos_t, pos_t1, thr=pos_thr) and not self._zone_flags[1]:
-            self._no_action_steps += 1
-            logger.info(f"SamePosition {self._no_action_steps:02d} times")
+    def update_no_action_counter(self, info, step_length, pos_thr=0.003):
+        same_pos = check_same_position(
+            self.last_info['position'], info['position'], thr=pos_thr)
+        if same_pos and not self._zone_flags[1]:
+            self._no_action_steps += step_length
+            logger.debug(f"[{info['timestamp']}] SamePosition {self._no_action_steps:02d} times")
         else:
             self._no_action_steps = 0
 
@@ -239,10 +239,10 @@ class DroneEnvContinuous(gym.Env):
     def no_action_limit(self):
         return self._no_action_steps >= self._max_no_action_steps
 
-    def update_risk_zone_counter(self):
+    def update_risk_zone_counter(self, info):
         if self._zone_flags[0]:  # risk zone
             self._risk_zone_steps += 1
-            logger.info(f"InsideRiskZone {self._risk_zone_steps:02d} times")
+            logger.debug(f"[{info['timestamp']}] InsideRiskZone {self._risk_zone_steps:02d} times")
         else:
             self._risk_zone_steps = 0
 
@@ -250,10 +250,10 @@ class DroneEnvContinuous(gym.Env):
     def risk_zone_limit(self):
         return self._risk_zone_steps > 1
 
-    def update_out_area_counter(self, position):
-        if any(check_flight_area(position, self.flight_area)):
+    def update_out_area_counter(self, info):
+        if any(check_flight_area(info['position'], self.flight_area)):
             self._out_area_steps += 1
-            logger.info(f"OutFlightArea {self._out_area_steps:02d} times")
+            logger.debug(f"[{info['timestamp']}] OutFlightArea {self._out_area_steps:02d} times")
         else:
             self._out_area_steps = 0
 
@@ -391,11 +391,6 @@ class DroneEnvContinuous(gym.Env):
         if not is_3d:
             uav_pos_t[2] = uav_pos_t1[2] = self.vtarget.position[2]
 
-        # no action and zone steps update
-        self.update_no_action_counter(uav_pos_t1)
-        self.update_risk_zone_counter()
-        self.update_out_area_counter(uav_pos_t1)
-
         # not terminal, must be avoided
         penalty = self.__compute_penalization(info)
         if penalty < 0:
@@ -416,9 +411,9 @@ class DroneEnvContinuous(gym.Env):
 
         return reward
 
-    def __time_limit(self):
+    def __time_limit(self, step_length):
         # time limit control
-        self._episode_steps += 1
+        self._episode_steps += step_length
         return self._episode_steps >= self._max_episode_steps
 
     def constraint_action(self, action, info):
@@ -427,8 +422,7 @@ class DroneEnvContinuous(gym.Env):
 
     def perform_action(self, action):
         # perform constrained action
-        info = self.last_info
-        c_action = self.constraint_action(action, info)
+        c_action = self.constraint_action(action, self.last_info)
         self.sim.send_action(c_action)
         # read new state
         observation, info = self.get_state()
@@ -439,11 +433,11 @@ class DroneEnvContinuous(gym.Env):
         return observation, info
 
     def lift_uav(self):
-        logger.info("Drone's taking off...")
+        _, info = self.get_state()
+        logger.debug(f"[{info['timestamp']}] Drone's taking off...")
         self.sim.take_off(self.init_altitude)
-        logger.info("Drone ready!")
-
-        self.perform_action([0., 0., 0., 0.])  # no action to update state only
+        _, info = self.get_state()
+        logger.debug(f"[{info['timestamp']}] Drone ready!")
 
     def reset(self, seed=None, target_pos=None, target_dim=None, **kwargs):
         """Reset episode in the Webots simulation."""
@@ -452,7 +446,6 @@ class DroneEnvContinuous(gym.Env):
         self.sim.reset()
         self.sim.play_fast()
         self.sim.sync()
-        self.last_state, self.last_info = self.get_state()
         self.set_target(position=target_pos, dimension=target_dim)
         self.lift_uav()
         self.init_runtime_vars()
@@ -465,19 +458,24 @@ class DroneEnvContinuous(gym.Env):
         reward = 0
         truncated = False
         # reaction time
-        react_frames = self.np_random.integers(low=self._frame_inter[0],
-                                               high=self._frame_inter[1],
-                                               endpoint=True)
-        for i in range(react_frames):
+        step_length = self.np_random.integers(low=self._frame_inter[0],
+                                              high=self._frame_inter[1],
+                                              endpoint=True)
+        for i in range(step_length):
             observation, info = self.perform_action(action)
             if self._end:
                 break
+
+        # no action and zone steps counters
+        self.update_risk_zone_counter(info)
+        self.update_out_area_counter(info)
+        self.update_no_action_counter(info, step_length)
 
         # compute reward
         reward = self.compute_reward(observation, info)  # obtain reward
 
         # timeout limit
-        if self.__time_limit():
+        if self.__time_limit(step_length):
             truncated = True
             logger.info(f"[{info['timestamp']}] Final state, Time limit")
             info['final'] = 'TimeLimit'
