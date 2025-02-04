@@ -6,7 +6,7 @@ Crazyflie drones.
 """
 
 import os
-from gym.envs.registration import register
+from gymnasium.envs.registration import register
 
 # Simulated environment requires of Webots' environment variables
 if "WEBOTS_HOME" in os.environ:

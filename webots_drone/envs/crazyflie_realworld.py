@@ -7,7 +7,7 @@ Created on Mon Nov 04 09:56:27 2024
 """
 from typing import Union
 import numpy as np
-from gym import logger
+from gymnasium import logger
 from pathlib import Path
 
 from webots_drone.envs import CrazyflieEnvContinuous

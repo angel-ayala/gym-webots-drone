@@ -6,8 +6,8 @@ Created on Wed Oct 30 14:40:27 2024
 @author: Angel Ayala <angel4ayala [at] gmail.com>
 """
 import numpy as np
-from gym import logger
-from gym import spaces
+from gymnasium import logger
+from gymnasium import spaces
 
 from webots_drone.envs import DroneEnvContinuous
 from webots_drone.utils import constrained_action

@@ -8,8 +8,8 @@ Created on Thu Jan 25 22:17:26 2024
 
 import cv2
 import numpy as np
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 
 from webots_drone.utils import min_max_norm
 from webots_drone.utils import flight_area_norm_position

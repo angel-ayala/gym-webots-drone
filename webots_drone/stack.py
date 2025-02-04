@@ -7,9 +7,9 @@ Created on Thu Feb 15 21:18:56 2024
 From OpenAI Baseline.
 https://github.com/openai/baselines/blob/master/baselines/common/atari_wrappers.py
 """
-import gym
+import gymnasium as gym
 import numpy as np
-from gym import spaces
+from gymnasium import spaces
 from collections import deque
 
 

@@ -5,11 +5,11 @@ Created on Fri May 29 19:11:52 2020
 
 @author: Angel Ayala <angel4ayala [at] gmail.com>
 """
-import gym
+import gymnasium as gym
 import numpy as np
 
-from gym import spaces, logger
-from gym.utils import seeding
+from gymnasium import spaces, logger
+from gymnasium.utils import seeding
 
 from webots_drone.reward import orientation2reward
 from webots_drone.reward import elevation2reward
@@ -353,7 +353,7 @@ class DroneEnvContinuous(gym.Env):
                 info['position'], info['north_rad'], norm=True))
             e_goal = elevation2reward(
                 self.vtarget.get_elevation_angle(info['position'], norm=True))
-            return (d_goal * o_goal * e_goal) > .99
+            return (d_goal * o_goal * e_goal) > .9
         else:
             return False
 

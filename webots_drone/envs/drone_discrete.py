@@ -6,7 +6,7 @@ Created on Fri May 29 19:11:52 2020
 @author: Angel Ayala <angel4ayala [at] gmail.com>
 """
 import numpy as np
-from gym import spaces
+from gymnasium import spaces
 
 from webots_drone.envs import DroneEnvContinuous
 
