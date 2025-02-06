@@ -22,7 +22,7 @@ setup(
     license='GPL-3.0',
     packages=[package_name],
     data_files=data_files,
-    install_requires=['gymnasium==0.28.1',
+    install_requires=['gymnasium==0.29.1',
                       'simple_pid==2.0.0',
                       'opencv-python==4.8.1.*'],
     classifiers=[
