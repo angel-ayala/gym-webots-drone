@@ -136,7 +136,8 @@ class CrazyflieEnvDiscrete(CrazyflieEnvContinuous):
         # Action space discretized + no action
         control_limits = np.hstack((self.action_limits[1],
                                     self.action_limits[0][::-1]))
-        self.action_space = spaces.Discrete(n=control_limits.shape[-1] + 1)
+        # self.action_space = spaces.Discrete(n=control_limits.shape[-1] + 1)
+        self.action_space = IntBox(low=0, high=control_limits.shape[-1] + 1)
 
     def discrete2continuous(self, action):
         if action == 0:  # no action
