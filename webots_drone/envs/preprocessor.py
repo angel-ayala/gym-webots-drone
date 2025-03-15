@@ -186,8 +186,8 @@ class CustomVectorObservation(gym.Wrapper):
             obs_low_limits.extend([-v for v in avel_range])
         if 'gps' in uav_data:
             obs_elems += 3
-            obs_high_limits.extend(self.env.flight_area[1])
-            obs_low_limits.extend(self.env.flight_area[0])
+            obs_high_limits.extend(self.env.unwrapped.flight_area[1])
+            obs_low_limits.extend(self.env.unwrapped.flight_area[0])
         if 'gps_vel' in uav_data:
             obs_elems += 3
             obs_high_limits.extend(speed_range)
@@ -304,41 +304,41 @@ class MultiModalObservation(gym.Wrapper):
             angles_range=[np.pi, np.pi / 2., np.pi],
             avel_range=[np.pi, np.pi / 2., np.pi], speed_range=[4., 4., 1.]):
         super().__init__(env)
-        self.rgb_obs = env.observation_space
-        self.env_vector = CustomVectorObservation(
+        self.pixel_space = env.observation_space
+        self.vector_obs = CustomVectorObservation(
             env, uav_data=uav_data, target_dist=target_dist,
             target_pos=target_pos, target_dim=target_dim,
             add_action=add_action, angles_range=angles_range,
             avel_range=avel_range, speed_range=speed_range)
         self.frame_stack = frame_stack
-        self.vector_observation = self.env_vector.observation
 
         if frame_stack > 1:
-            self.env_rgb = ObservationStack(env, k=frame_stack)
-            self.rgb_obs = self.env_rgb.observation_space
-            self.env_vector = ObservationStack(self.env_vector, k=frame_stack)
-            self.vector_obs = self.env_vector.observation_space
+            self.pixel_obs = ObservationStack(env, k=frame_stack)
+            self.pixel_space = self.pixel_obs.observation_space
+            self.vector_obs = ObservationStack(self.vector_obs, k=frame_stack)
 
-        self.observation_space = spaces.Tuple((self.rgb_obs, self.vector_obs))
+        self.vector_space = self.vector_obs.observation_space
+        self.observation_space = spaces.Dict({'vector': self.vector_space,
+                                              'pixel': self.pixel_space})
 
     def get_state(self, action):
         """Process the environment to get a state."""
-        state_data = self.env.sim.get_data()
+        _, state_data = self.env.unwrapped.get_state()
         # order sensors by dimension and split
-        state_2d = self.env.get_observation_2d(state_data)
-        state_1d = self.env.get_observation_1d(state_data)
-        state_1d = self.vector_observation(state_1d, state_data, action)
-        return state_2d, state_1d
+        state_2d = self.env.unwrapped.get_observation_2d(state_data)
+        state_1d = self.env.unwrapped.get_observation_1d(state_data)
+        state_1d = self.vector_obs.observation(state_1d, state_data, action)
+        return {'vector': state_1d, 'pixel': state_2d}
 
     def step(self, action):
         _, rews, terminateds, truncateds, info = self.env.step(action)
         new_obs = self.get_state(action)
         
         if self.frame_stack > 1:
-            self.env_rgb.frames.append(new_obs[0])
-            self.env_vector.frames.append(new_obs[1][np.newaxis, ...])
-            new_obs = (self.env_rgb.observation(None),
-                       self.env_vector.observation(None))
+            self.pixel_obs.frames.append(new_obs['pixel'])
+            self.vector_obs.frames.append(new_obs['vector'][np.newaxis, ...])
+            new_obs = {'vector': self.vector_obs.observation(None),
+                       'pixel': self.pixel_obs.observation(None)}
 
         return new_obs, rews, terminateds, truncateds, info
 
@@ -347,10 +347,10 @@ class MultiModalObservation(gym.Wrapper):
         _, info = self.env.reset(**kwargs)
         new_obs = self.get_state(np.zeros(self.action_space.shape))
         if self.frame_stack > 1:
-            for _ in range(self.frame_stack):
-                self.env_rgb.frames.append(new_obs[0])
-                self.env_vector.frames.append(new_obs[1][np.newaxis, ...])
-            new_obs = (self.env_rgb.observation(None),
-                       self.env_vector.observation(None))
+            for _ in range(self.frame_stack):                    
+                self.pixel_obs.frames.append(new_obs['pixel'])
+                self.vector_obs.frames.append(new_obs['vector'][np.newaxis, ...])
+            new_obs = {'vector': self.vector_obs.observation(None),
+                       'pixel': self.pixel_obs.observation(None)}
 
         return new_obs, info
