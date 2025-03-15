@@ -333,7 +333,7 @@ class MultiModalObservation(gym.Wrapper):
     def step(self, action):
         _, rews, terminateds, truncateds, info = self.env.step(action)
         new_obs = self.get_state(action)
-        
+
         if self.frame_stack > 1:
             self.pixel_obs.frames.append(new_obs['pixel'])
             self.vector_obs.frames.append(new_obs['vector'][np.newaxis, ...])
@@ -347,7 +347,7 @@ class MultiModalObservation(gym.Wrapper):
         _, info = self.env.reset(**kwargs)
         new_obs = self.get_state(np.zeros(self.action_space.shape))
         if self.frame_stack > 1:
-            for _ in range(self.frame_stack):                    
+            for _ in range(self.frame_stack):
                 self.pixel_obs.frames.append(new_obs['pixel'])
                 self.vector_obs.frames.append(new_obs['vector'][np.newaxis, ...])
             new_obs = {'vector': self.vector_obs.observation(None),
