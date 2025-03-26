@@ -310,14 +310,15 @@ class MultiModalObservation(gym.Wrapper):
             target_pos=target_pos, target_dim=target_dim,
             add_action=add_action, angles_range=angles_range,
             avel_range=avel_range, speed_range=speed_range)
+        self.vector_space = self.vector_obs.observation_space
         self.frame_stack = frame_stack
 
         if frame_stack > 1:
             self.pixel_obs = ObservationStack(env, k=frame_stack)
             self.pixel_space = self.pixel_obs.observation_space
-            self.vector_obs = ObservationStack(self.vector_obs, k=frame_stack)
+            self.vector_stack = ObservationStack(self.vector_obs, k=frame_stack)
+            self.vector_space = self.vector_stack.observation_space
 
-        self.vector_space = self.vector_obs.observation_space
         self.observation_space = spaces.Dict({'vector': self.vector_space,
                                               'pixel': self.pixel_space})
 
@@ -336,8 +337,8 @@ class MultiModalObservation(gym.Wrapper):
 
         if self.frame_stack > 1:
             self.pixel_obs.frames.append(new_obs['pixel'])
-            self.vector_obs.frames.append(new_obs['vector'][np.newaxis, ...])
-            new_obs = {'vector': self.vector_obs.observation(None),
+            self.vector_stack.frames.append(new_obs['vector'][np.newaxis, ...])
+            new_obs = {'vector': self.vector_stack.observation(None),
                        'pixel': self.pixel_obs.observation(None)}
 
         return new_obs, rews, terminateds, truncateds, info
@@ -349,8 +350,8 @@ class MultiModalObservation(gym.Wrapper):
         if self.frame_stack > 1:
             for _ in range(self.frame_stack):
                 self.pixel_obs.frames.append(new_obs['pixel'])
-                self.vector_obs.frames.append(new_obs['vector'][np.newaxis, ...])
-            new_obs = {'vector': self.vector_obs.observation(None),
+                self.vector_stack.frames.append(new_obs['vector'][np.newaxis, ...])
+            new_obs = {'vector': self.vector_stack.observation(None),
                        'pixel': self.pixel_obs.observation(None)}
 
         return new_obs, info
