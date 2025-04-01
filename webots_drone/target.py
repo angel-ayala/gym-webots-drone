@@ -140,17 +140,23 @@ class VirtualTarget:
         return self.risk_distance + threshold
 
     def get_sensor_readings(self, ref_position, ref_orientation, range_dist=10.):
+        # defines the most activated sensor
         angle_diff = self.get_orientation_diff(ref_position, ref_orientation, False)
         angle_diff_norm = angle_diff / np.pi
         angle_offset = np.abs(angle_diff) / (np.pi * 0.5)
         angle_sensors = np.array([
-            max(0., 1 - angle_offset),    # front sensor
+            max(0., 1. - angle_offset),    # front sensor
             max(0., angle_offset - 1.),   # rear sensor
-            max(0, angle_diff_norm),      # left sensor
-            max(0, angle_diff_norm * -1)  # right sensor
+            max(0., angle_diff_norm),      # left sensor
+            max(0., angle_diff_norm * -1.)  # right sensor
             ])
-        dist_scalar = self.get_distance(ref_position) / self.get_risk_distance()
-        dist_scalar = np.clip(1 - dist_scalar / range_dist, 0, 1)
+        # defines measurement strenght
+        pos_diff = np.subtract(ref_position, self.position)
+        scalar_xy = np.linalg.norm(pos_diff[:2]) / self.get_risk_distance()
+        scalar_xy = 1 - scalar_xy / range_dist  # [0, 1]
+        scalar_z = np.clip(np.linalg.norm(pos_diff[-1]) / range_dist, 0, 1)
+        dist_scalar = np.clip(scalar_xy - scalar_z, 0, 1)
+        # resolution up to three digits
         return (angle_sensors * dist_scalar).round(3)
 
     def __repr__(self):
