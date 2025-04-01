@@ -168,7 +168,7 @@ class StoreStepData:
         state_cols = ['pos_x', 'pos_y', 'pos_z',
                       'ori_x', 'ori_y', 'ori_z',
                       'vel_x', 'vel_y', 'vel_z',
-                      'velang_x', 'velang_y', 'velang_z', 'north_rad']
+                      'velang_x', 'velang_y', 'velang_z']
         # action_cols = ['roll', 'pitch', 'yaw', 'thrust']
         action_cols = ['action']
 

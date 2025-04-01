@@ -227,7 +227,7 @@ class WebotsSimulation(Supervisor):
         emitter_send_json(self.action, command)
         self.one_step()  # step to process the action
         self.read_data()
-    
+
     def take_off(self, height):
         lift_action = [0., 0., 0., self.limits[1][3]]
         height_diff = lambda x: x - self.get_data()['position'][2]
@@ -250,7 +250,7 @@ class WebotsSimulation(Supervisor):
         while len(self._data.keys()) == 0:
             self.one_step()
             self.read_data()
-    
+
     def get_kb_capturer(self):
         kb = self.getKeyboard()
         kb.enable(self.timestep)
@@ -366,7 +366,6 @@ def run(controller, show=True, action_fn=kb2action, **kwargs):
     target_dim = kwargs.get('target_dim', [7., 3.5])
     altitude_limits = kwargs.get('height_limits', [11., 75.])
     frame_skip = kwargs.get('frame_skip', 25)
-    reward_vel_factor = kwargs.get('vel_factor', 0.035)
     reward_pos_thr = kwargs.get('pos_thr', 0.003)
     is_3d = kwargs.get('is_3d', False)
     is_vel_control = kwargs.get('is_vel_control', False)
@@ -378,8 +377,7 @@ def run(controller, show=True, action_fn=kb2action, **kwargs):
     vtarget = VirtualTarget(dimension=target_dim,
                             webots_node=controller.target_node, is_3d=is_3d)
     vtarget.set_position(target_pos)
-    distance2target = vtarget.get_risk_distance(goal_threshold / 2.) \
-        + controller.vehicle_dim[1]
+    distance2target = vtarget.get_risk_distance(goal_threshold / 2.)
 
     controller.play()
     controller.sync()
@@ -458,7 +456,6 @@ if __name__ == '__main__':
         'target_dim': [7., 3.5],
         'height_limits': [11., 75.],
         'frame_skip': 25,
-        'vel_factor': 0.035,
         'pos_thr': 0.003,
         'is_3d': False,
         'init_height': 20.,

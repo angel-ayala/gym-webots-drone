@@ -24,9 +24,7 @@ from webots_drone.utils import constrained_action
 
 from .preprocessor import seconds2steps
 from .preprocessor import info2image
-from .preprocessor import normalize_pixels
-from .preprocessor import info2obs_1d
-from .preprocessor import normalize_vector
+from .preprocessor import info2state
 
 
 class DroneEnvContinuous(gym.Env):
@@ -91,7 +89,7 @@ class DroneEnvContinuous(gym.Env):
 
         # self.reward_limits = [-2. - (2.21 * self._frame_inter[0]),
         #                       3.21 * self._frame_inter[1]]
-        self.zone_steps = zone_steps if zone_steps > 0 else float('inf')
+        # self.zone_steps = zone_steps if zone_steps > 0 else float('inf')
 
         # virtualTarget
         self.vtarget = self.create_target(target_dim)
@@ -185,18 +183,10 @@ class DroneEnvContinuous(gym.Env):
         logger.info(str(self.vtarget))
 
     def get_observation_2d(self, state_data, norm=False):
-        state_2d = info2image(state_data, output_size=self.obs_shape[-1])
-        if norm:
-            state_2d = normalize_pixels(state_2d)
-        return state_2d
+        return info2image(state_data, output_size=self.obs_shape[-1])
 
     def get_observation_1d(self, state_data, norm=False):
-        state_1d = info2obs_1d(state_data)
-        if norm:
-            xyz_ranges = list(zip(*self.flight_area))
-            xyz_velocities = [4., 4., 1.]
-            state_1d = normalize_vector(state_1d, xyz_ranges, xyz_velocities)
-        return state_1d
+        return info2state(state_data)
 
     def get_state(self):
         """Process the environment to get a state."""

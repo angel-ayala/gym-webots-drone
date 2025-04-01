@@ -18,6 +18,10 @@ from webots_drone.utils import compute_distance
 from webots_drone.stack import ObservationStack
 
 
+UAV_DATA = ['imu', 'gyro', 'gps', 'gps_vel', 'north', 'dist_sensors'
+            'motors', 'target_sensors']
+
+
 def seconds2steps(seconds, frame_skip, step_time):
     total_step_time = frame_skip * step_time
     return int(seconds * 1000 / total_step_time)
@@ -30,27 +34,7 @@ def info2state(info):
         vector_state[3:6] = info['orientation']  # euler angles
         vector_state[6:9] = info['speed']
         vector_state[9:12] = info['angular_velocity']
-        vector_state[-1] = info['north_rad']
     return vector_state
-
-
-def state2position(vector_state):
-    inertial_state = np.concatenate((vector_state[:3],
-                                     vector_state[6:9]), dtype=np.float32)
-    return inertial_state
-
-
-def state2inertial(vector_state):
-    position = np.concatenate((vector_state[3:6],
-                               vector_state[9:12]), dtype=np.float32)
-    return position
-
-
-def info2distance(info):
-    distance_sensors = np.zeros((9, ), dtype=np.float32)
-    if info is not None:
-        distance_sensors = np.array(info["dist_sensors"], dtype=np.float32)
-    return distance_sensors
 
 
 def info2image(info, output_size):
@@ -75,62 +59,6 @@ def info2emitter_vector(info):
     return emitter_vector
 
 
-def info2obs_1d(infos):
-    vector_state = info2state(infos)
-    # normalize
-    sensor_attitude = state2inertial(vector_state)
-    sensor_position = state2position(vector_state)
-    sensor_north = vector_state[-1]
-    sensor_distance = info2distance(infos)
-    # sensor_emitter = info2emitter_vector(infos)
-    obs_1d = np.hstack((sensor_attitude, sensor_position,
-                        sensor_north, sensor_distance), dtype=np.float32)
-    return obs_1d
-
-
-def preprocess_orientation(orientation):
-    # Convert from [-pi, pi] to [0, 2pi]
-    if orientation < 0:
-        orientation += 2 * np.pi
-    return orientation
-
-
-def normalize_pixels(obs):
-    return obs / 255.
-
-
-def normalize_position(obs, x_range, y_range, z_range, x_vel, y_vel, z_vel):
-    # Normalize position
-    obs[0] = min_max_norm(obs[0], a=-1, b=1, minx=x_range[0], maxx=x_range[1])
-    obs[1] = min_max_norm(obs[1], a=-1, b=1, minx=y_range[0], maxx=y_range[1])
-    obs[2] = min_max_norm(obs[2], a=-1, b=1, minx=z_range[0], maxx=z_range[1])
-    # Normalize translational velocities
-    obs[3] /= x_vel
-    obs[4] /= y_vel
-    obs[5] /= z_vel
-    return obs
-
-
-def normalize_angles(obs):
-    # Normalize Euler angles
-    obs[0] = min_max_norm(obs[0], a=-1, b=1, minx=-np.pi, maxx=np.pi)
-    obs[1] = min_max_norm(obs[1], a=-1, b=1, minx=-np.pi/2, maxx=np.pi/2)
-    obs[2] = min_max_norm(obs[2], a=-1, b=1, minx=-np.pi, maxx=np.pi)
-    # Normalize angular velocities
-    obs[3] = min_max_norm(obs[3], a=-1, b=1, minx=-np.pi, maxx=np.pi)
-    obs[4] = min_max_norm(obs[4], a=-1, b=1, minx=-np.pi/2, maxx=np.pi/2)
-    obs[5] = min_max_norm(obs[5], a=-1, b=1, minx=-np.pi, maxx=np.pi)
-    return obs
-
-
-def normalize_vector(vector, xyz_range, xyz_vel):
-    norm_vector = vector.copy()
-    norm_vector[:6] = normalize_angles(norm_vector[:6])
-    norm_vector[6:12] = normalize_position(norm_vector[6:12], *xyz_range, *xyz_vel)
-    norm_vector[12] /= np.pi
-    return norm_vector
-
-
 def crop_from_center(img):
     """center crop image."""
     # make it square from center
@@ -143,30 +71,8 @@ def crop_from_center(img):
     return result
 
 
-def info2target_position(info):
-    target_pos = info['target_position']
-    return target_pos
-
-
-def info2target_distance(info):
-    # distance
-    uav_pos = info['position']
-    target_pos = info['target_position']
-    target_dist = uav_pos - target_pos
-    # orientation
-    target_ori = compute_target_orientation(uav_pos[:2], target_pos[:2])
-    ori_diff_norm = np.cos(target_ori - info['north_rad'])
-    return target_dist, ori_diff_norm
-
-
-def info2target_dim(info):
-    target_dim = np.array(info['target_dim'])  # / 10.
-    return target_dim.tolist()
-
-
 class CustomVectorObservation(gym.Wrapper):
-    def __init__(self, env: gym.Env, uav_data=['imu', 'gyro', 'gps', 'gps_vel',
-                                               'north', 'dist_sensors'],
+    def __init__(self, env: gym.Env, uav_data=UAV_DATA,
                  target_dist=False, target_pos=False, target_dim=False,
                  add_action=False, angles_range=[np.pi, np.pi / 2., np.pi],
                  avel_range=[np.pi, np.pi / 2., np.pi],
@@ -196,6 +102,18 @@ class CustomVectorObservation(gym.Wrapper):
             obs_elems += 1
             obs_high_limits.append(angles_range[2])
             obs_low_limits.append(-angles_range[2])
+        if 'dist_sensors' in uav_data:
+            obs_elems += n_dist_sensors
+            obs_high_limits.extend([1. for _ in range(n_dist_sensors)])
+            obs_low_limits.extend([0. for _ in range(n_dist_sensors)])
+        if 'target_sensors' in uav_data:
+            obs_elems += 4
+            obs_high_limits.extend([1. for _ in range(4)])
+            obs_low_limits.extend([0. for _ in range(4)])
+        if 'motors' in uav_data:
+            obs_elems += 4
+            obs_high_limits.extend([float('inf') for _ in range(4)])
+            obs_low_limits.extend([0. for _ in range(4)])
 
         self.target_dist = target_dist
         if target_dist:
@@ -225,58 +143,58 @@ class CustomVectorObservation(gym.Wrapper):
                 obs_low_limits.append(0)
             obs_elems += self.action_vars
 
-        if 'dist_sensors' in uav_data:
-            obs_elems += n_dist_sensors
-            obs_high_limits.extend([1. for _ in range(n_dist_sensors)])
-            obs_low_limits.extend([0. for _ in range(n_dist_sensors)])
-
         obs_shape = (obs_elems, )
         self.observation_space = spaces.Box(low=np.asarray(obs_low_limits),
                                             high=np.asarray(obs_high_limits),
                                             shape=obs_shape, dtype=np.float32)
 
-    def observation(self, obs, info, action):
+    def observation(self, info, action):
         new_obs = list()
         if 'imu' in self.uav_data:
-            new_obs.extend(obs[:3])
+            new_obs.extend(info['orientation'])
         if 'gyro' in self.uav_data:
-            new_obs.extend(obs[3:6])
+            new_obs.extend(info['angular_velocity'])
         if 'gps' in self.uav_data:
-            new_obs.extend(obs[6:9])
+            new_obs.extend(info['position'])
         if 'gps_vel' in self.uav_data:
-            new_obs.extend(obs[9:12])
+            new_obs.extend(info['speed'])
         if 'north' in self.uav_data:
-            new_obs.append(obs[12])
+            new_obs.append(info['north_rad'])
+        if 'dist_sensors' in self.uav_data:
+            new_obs.extend(info['dist_sensors'])
+        if 'target_sensors' in self.uav_data:
+            new_obs.extend(self.env.unwrapped.vtarget.get_sensor_readings(
+                info['position'], info['north_rad']))
+        if 'motors' in self.uav_data:
+            new_obs.extend(info['motors_vel'])
 
         if self.target_pos:
-            new_obs.extend(info2target_position(info))
+            new_obs.extend(self.env.unwrapped.vtarget.position)
         if self.target_dim:
-            new_obs.extend(info2target_dim(info))
+            new_obs.extend(self.env.unwrapped.vtarget.dimension)
         if self.target_dist:
-            new_obs.extend(info2target_distance(info))
-        # append action v_t-1
+            new_obs.extend(np.subtract(
+                self.env.unwrapped.vtarget.position, info['position']))
+        # append action t-1
         if self.add_action:
             if len(self.env.action_space.shape) > 0:
                 action_max = self.env.action_limits[1][:self.action_vars]
                 new_obs.extend(action / action_max)
             else:
                 new_obs.append(action)
-        # append sensors at the end
-        if 'dist_sensors' in self.uav_data:
-            new_obs.extend(obs[13:])
 
         return np.array(new_obs)
 
     def step(self, action):
         obs, rews, terminateds, truncateds, info = self.env.step(action)
         # adding target vector, expecting info2obs_1d
-        new_obs = self.observation(obs, info, action)
+        new_obs = self.observation(info, action)
         return new_obs, rews, terminateds, truncateds, info
 
     def reset(self, **kwargs):
         """Resets the environment and normalizes the observation."""
         obs, info = self.env.reset(**kwargs)
-        new_obs = self.observation(obs, info, np.zeros(self.action_space.shape))
+        new_obs = self.observation(info, np.zeros(self.action_space.shape))
         return new_obs, info
 
 
@@ -297,8 +215,7 @@ class ReducedActionSpace(gym.Wrapper):
 
 
 class MultiModalObservation(gym.Wrapper):
-    def __init__(self, env: gym.Env, uav_data=[
-            'imu', 'gyro', 'gps', 'gps_vel', 'north', 'dist_sensors'],
+    def __init__(self, env: gym.Env, uav_data=UAV_DATA,
             frame_stack=1, target_dist=False, target_pos=False,
             target_dim=False, add_action=False,
             angles_range=[np.pi, np.pi / 2., np.pi],
@@ -327,8 +244,8 @@ class MultiModalObservation(gym.Wrapper):
         _, state_data = self.env.unwrapped.get_state()
         # order sensors by dimension and split
         state_2d = self.env.unwrapped.get_observation_2d(state_data)
-        state_1d = self.env.unwrapped.get_observation_1d(state_data)
-        state_1d = self.vector_obs.observation(state_1d, state_data, action)
+        # state_1d = self.env.unwrapped.get_observation_1d(state_data)
+        state_1d = self.vector_obs.observation(state_data, action)
         return {'vector': state_1d, 'pixel': state_2d}
 
     def step(self, action):

@@ -122,7 +122,6 @@ if __name__ == '__main__':
         'target_dim': [.05, .02],
         'height_limits': [.25, 2.25],
         'frame_skip': 6,
-        'vel_factor': 0.02,
         'pos_thr': 0.003,
         'is_3d': True,
         'init_height': 0.3,
