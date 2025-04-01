@@ -62,7 +62,7 @@ class DroneEnvContinuous(gym.Env):
                                                 shape=self.obs_shape,
                                                 dtype=self.obs_type)
         else:
-            self.obs_shape = (22, )
+            self.obs_shape = (12, )
             self.obs_type = np.float32
             self.observation_space = spaces.Box(low=float('-inf'),
                                                 high=float('inf'),

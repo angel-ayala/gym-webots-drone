@@ -10,11 +10,8 @@ import cv2
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
+from sklearn.preprocessing import MinMaxScaler
 
-from webots_drone.utils import min_max_norm
-from webots_drone.utils import flight_area_norm_position
-from webots_drone.utils import compute_target_orientation
-from webots_drone.utils import compute_distance
 from webots_drone.stack import ObservationStack
 
 
@@ -28,7 +25,7 @@ def seconds2steps(seconds, frame_skip, step_time):
 
 
 def info2state(info):
-    vector_state = np.zeros((13, ), dtype=np.float32)
+    vector_state = np.zeros((12, ), dtype=np.float32)
     if info is not None:
         vector_state[:3] = info['position']  # world coordinates
         vector_state[3:6] = info['orientation']  # euler angles
@@ -76,7 +73,7 @@ class CustomVectorObservation(gym.Wrapper):
                  target_dist=False, target_pos=False, target_dim=False,
                  add_action=False, angles_range=[np.pi, np.pi / 2., np.pi],
                  avel_range=[np.pi, np.pi / 2., np.pi],
-                 speed_range=[4., 4., 1.], n_dist_sensors=9):
+                 speed_range=[4., 4., 1.], n_dist_sensors=9, norm_obs=False):
         super().__init__(env)
         obs_elems = 0
         obs_high_limits = []
@@ -115,11 +112,6 @@ class CustomVectorObservation(gym.Wrapper):
             obs_high_limits.extend([float('inf') for _ in range(4)])
             obs_low_limits.extend([0. for _ in range(4)])
 
-        self.target_dist = target_dist
-        if target_dist:
-            obs_elems += 4
-            obs_high_limits.extend([10., 10., 10., 1.])
-            obs_low_limits.extend([0., 0., 0., -1.])
         self.target_pos = target_pos
         if target_pos:
             obs_elems += 3
@@ -130,6 +122,11 @@ class CustomVectorObservation(gym.Wrapper):
             obs_elems += 2
             obs_high_limits.extend([10., 10.])
             obs_low_limits.extend([0., 0.])
+        self.target_dist = target_dist
+        if target_dist:
+            obs_elems += 4
+            obs_high_limits.extend([10., 10., 10., 1.])
+            obs_low_limits.extend([0., 0., 0., -1.])
 
         self.add_action = add_action
         if add_action:
@@ -147,9 +144,14 @@ class CustomVectorObservation(gym.Wrapper):
         self.observation_space = spaces.Box(low=np.asarray(obs_low_limits),
                                             high=np.asarray(obs_high_limits),
                                             shape=obs_shape, dtype=np.float32)
+        self.norm_obs = norm_obs
+        if norm_obs:
+            self.scaler = MinMaxScaler(feature_range=(-1, 1))
+            self.scaler.fit([self.observation_space.low,
+                             self.observation_space.high])
 
-    def observation(self, info, action):
-        new_obs = list()
+    def observation(self, info, action, norm_obs=False):
+        new_obs = []
         if 'imu' in self.uav_data:
             new_obs.extend(info['orientation'])
         if 'gyro' in self.uav_data:
@@ -182,19 +184,22 @@ class CustomVectorObservation(gym.Wrapper):
                 new_obs.extend(action / action_max)
             else:
                 new_obs.append(action)
-
-        return np.array(new_obs)
+        new_obs = np.asarray(new_obs)
+        if norm_obs:
+            new_obs = self.scaler.transform([new_obs])
+        return new_obs
 
     def step(self, action):
         obs, rews, terminateds, truncateds, info = self.env.step(action)
         # adding target vector, expecting info2obs_1d
-        new_obs = self.observation(info, action)
+        new_obs = self.observation(info, action, self.norm_obs)
         return new_obs, rews, terminateds, truncateds, info
 
     def reset(self, **kwargs):
         """Resets the environment and normalizes the observation."""
         obs, info = self.env.reset(**kwargs)
-        new_obs = self.observation(info, np.zeros(self.action_space.shape))
+        new_obs = self.observation(info, np.zeros(self.action_space.shape),
+                                   self.norm_obs)
         return new_obs, info
 
 
@@ -219,14 +224,15 @@ class MultiModalObservation(gym.Wrapper):
             frame_stack=1, target_dist=False, target_pos=False,
             target_dim=False, add_action=False,
             angles_range=[np.pi, np.pi / 2., np.pi],
-            avel_range=[np.pi, np.pi / 2., np.pi], speed_range=[4., 4., 1.]):
+            avel_range=[np.pi, np.pi / 2., np.pi], speed_range=[4., 4., 1.],
+            norm_obs=False):
         super().__init__(env)
         self.pixel_space = env.observation_space
         self.vector_obs = CustomVectorObservation(
             env, uav_data=uav_data, target_dist=target_dist,
             target_pos=target_pos, target_dim=target_dim,
             add_action=add_action, angles_range=angles_range,
-            avel_range=avel_range, speed_range=speed_range)
+            avel_range=avel_range, speed_range=speed_range, norm_obs=norm_obs)
         self.vector_space = self.vector_obs.observation_space
         self.frame_stack = frame_stack
 
