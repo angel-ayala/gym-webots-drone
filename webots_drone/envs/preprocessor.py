@@ -205,8 +205,8 @@ class CustomVectorObservation(gym.Wrapper):
         self.target_pos = target_pos
         if target_pos:
             obs_elems += 3
-            obs_high_limits.extend(self.env.flight_area[1])
-            obs_low_limits.extend(self.env.flight_area[0])
+            obs_high_limits.extend(self.env.unwrapped.flight_area[1])
+            obs_low_limits.extend(self.env.unwrapped.flight_area[0])
         self.target_dim = target_dim
         if target_dim:
             obs_elems += 2

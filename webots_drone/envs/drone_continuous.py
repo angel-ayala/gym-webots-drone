@@ -11,9 +11,6 @@ import numpy as np
 from gymnasium import spaces, logger
 from gymnasium.utils import seeding
 
-from webots_drone.reward import orientation2reward
-from webots_drone.reward import elevation2reward
-from webots_drone.reward import distance2reward
 from webots_drone.reward import compute_vector_reward
 from webots_drone.reward import compute_visual_reward
 from webots_drone.utils import compute_distance
@@ -36,8 +33,7 @@ class DroneEnvContinuous(gym.Env):
     """Gym enviroment to control the Fire scenario in the Webots simulator."""
 
     metadata = {
-        'render.modes': ['human', 'rgb_array'],
-        # 'video.frames_per_second' : 30
+        'render_modes': ['human', 'rgb_array'],
     }
 
     def __init__(self, time_limit_seconds=60,  # 1 min
@@ -345,36 +341,13 @@ class DroneEnvContinuous(gym.Env):
 
         return bonus
 
-    def is_goal_state(self, info):
-        if self._zone_flags[1] and self._out_area_steps == 0:
-            d_goal = 1 + distance2reward(
-                self.distance2goal(info['position']), self.goal_distance)
-            o_goal = orientation2reward(self.vtarget.get_orientation_diff(
-                info['position'], info['north_rad'], norm=True))
-            e_goal = elevation2reward(
-                self.vtarget.get_elevation_angle(info['position'], norm=True))
-            return (d_goal * o_goal * e_goal) > .9
-        else:
-            return False
-
-    def get_uav_zone(self, position):
+    def check_zones(self, position):
         zones = check_target_distance(self.distance2goal(position),
                                       self.goal_distance,
                                       self._goal_threshold)
         return zones
 
-    def compute_reward(self, obs, info, is_3d=False, vel_factor=0.035,
-                       pos_thr=0.003):
-        """Compute the distance-based reward.
-
-        Compute the distance between drone and fire.
-        This consider a risk_zone to 4 times the fire height as mentioned in
-        Firefighter Safety Zones: A Theoretical Model Based on Radiative
-        Heating, Butler, 1998.
-
-        :param float distance_threshold: Indicate the acceptable distance
-            margin before the fire's risk zone.
-        """
+    def compute_reward(self, obs, info):
         info['bonus'] = 'no'
         info['penalization'] = 'no'
         info['final'] = 'no'
@@ -386,22 +359,20 @@ class DroneEnvContinuous(gym.Env):
             uav_pos_t = self.last_info['position']  # pos_t
         uav_pos_t1 = info['position']  # pos_t+1
         uav_ori_t1 = info['north_rad']  # orientation_t+1
-
-        # 2 dimension considered
-        if not is_3d:
-            uav_pos_t[2] = uav_pos_t1[2] = self.vtarget.position[2]
+        delta_time = round(info['timestamp'] - self.last_info['timestamp'], 6)
 
         # not terminal, must be avoided
         penalty = self.__compute_penalization(info)
         if penalty < 0:
-            return penalty
+            return penalty, False
 
         # compute reward components
-        reward = compute_vector_reward(
-            self.vtarget, uav_pos_t, uav_pos_t1, uav_ori_t1,
+        reward, goal_reached = compute_vector_reward(
+            self.vtarget, uav_pos_t, uav_pos_t1, uav_ori_t1, delta_time,
             goal_distance=self.goal_distance,
-            distance_margin=self._goal_threshold,
-            vel_factor=vel_factor, pos_thr=pos_thr)
+            distance_margin=self._goal_threshold)
+
+        goal_reached = goal_reached and self._out_area_steps == 0
 
         # if self.is_pixels:
         #     reward += compute_visual_reward(obs)
@@ -409,7 +380,7 @@ class DroneEnvContinuous(gym.Env):
         # must be encouraged
         # reward += self.__compute_bonus(info)
 
-        return reward
+        return reward, goal_reached
 
     def __time_limit(self, step_length):
         # time limit control
@@ -426,7 +397,7 @@ class DroneEnvContinuous(gym.Env):
         self.sim.send_action(c_action)
         # read new state
         observation, info = self.get_state()
-        self._zone_flags = self.get_uav_zone(info['position'])
+        self._zone_flags = self.check_zones(info['position'])
         # terminal states
         self._end = self.__is_final_state(info)
 
@@ -469,10 +440,10 @@ class DroneEnvContinuous(gym.Env):
         # no action and zone steps counters
         self.update_risk_zone_counter(info)
         self.update_out_area_counter(info)
-        self.update_no_action_counter(info, step_length)
+        self.update_no_action_counter(info, i + 1)
 
         # compute reward
-        reward = self.compute_reward(observation, info)  # obtain reward
+        reward, goal_reached = self.compute_reward(observation, info)
 
         # timeout limit
         if self.__time_limit(step_length):
@@ -480,7 +451,7 @@ class DroneEnvContinuous(gym.Env):
             logger.info(f"[{info['timestamp']}] Final state, Time limit")
             info['final'] = 'TimeLimit'
         # goal state
-        if self.is_goal_state(info):
+        if goal_reached:
             reward += 10.
             truncated = True
             logger.info(f"[{info['timestamp']}] Final state, Goal reached")

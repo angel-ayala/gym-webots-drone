@@ -10,6 +10,7 @@ import numpy as np
 
 from webots_drone.utils import angle_90deg_offset
 from webots_drone.utils import angle_inverse
+from webots_drone.utils import compute_angle_diff
 from webots_drone.utils import compute_distance
 from webots_drone.utils import compute_orientation
 from webots_drone.utils import compute_risk_distance
@@ -132,9 +133,7 @@ class VirtualTarget:
     def get_orientation_diff(self, ref_position, ref_orientation, norm=False):
         """Compute the angle difference between the reference and the target."""
         orientation = self.get_orientation(ref_position)
-        diff_angle = ref_orientation - orientation
-        if norm:
-            diff_angle = np.cos(diff_angle)
+        diff_angle = compute_angle_diff(ref_orientation, orientation, norm)
         return diff_angle
 
     def get_risk_distance(self, threshold=0.):

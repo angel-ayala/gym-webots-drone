@@ -310,3 +310,11 @@ def constrained_action(action, position, north_rad, flight_area, is_vel=False):
         return pitch_angle, -roll_angle, yaw_angle, altitude
     else:
         return roll_angle, pitch_angle, yaw_angle, altitude
+
+
+def compute_angle_diff(angle1, angle2, normalized=False):
+    delta_theta = angle2 - angle1
+    delta_theta = (delta_theta + np.pi) % (2 * np.pi) - np.pi
+    if normalized:
+        delta_theta = delta_theta / np.pi
+    return np.round(delta_theta, 6)

@@ -14,7 +14,7 @@ from collections import deque
 
 
 class ObservationStack(gym.Wrapper):
-    def __init__(self, env, k):
+    def __init__(self, env, k, add_t=False, force_np=False):
         """Stack k last frames.
 
         Returns lazy array, which is much more memory efficient.
@@ -25,23 +25,24 @@ class ObservationStack(gym.Wrapper):
         """
         super().__init__(env)
         self.k = k
+        self.force_np = force_np
+        self.add_temporal_channel = add_t
         self.frames = deque([], maxlen=k)
         shp = env.observation_space.shape
         obs_low = env.observation_space.low
         obs_high = env.observation_space.high
-        if len(shp) == 1:
-            shp = (1, shp[0])
+        if self.add_temporal_channel:
             obs_low = obs_low[np.newaxis, ...]
             obs_high = obs_high[np.newaxis, ...]
         obs_low = np.repeat(obs_low, k, axis=0)
         obs_high = np.repeat(obs_high, k, axis=0)
-        self.observation_space = spaces.Box(
-            low=obs_low, high=obs_high,
-            shape=((shp[0] * k,) + shp[1:]), dtype=env.observation_space.dtype)
+        self.observation_space = spaces.Box(low=obs_low, high=obs_high,
+                                            shape=obs_high.shape,
+                                            dtype=env.observation_space.dtype)
 
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
-        if len(obs.shape) == 1:
+        if self.add_temporal_channel:
             obs = obs[np.newaxis, ...]
         for _ in range(self.k):
             self.frames.append(obs)
@@ -49,13 +50,15 @@ class ObservationStack(gym.Wrapper):
 
     def step(self, action):
         obs, reward, done, trunc, info = self.env.step(action)
-        if len(obs.shape) == 1:
+        if self.add_temporal_channel:
             obs = obs[np.newaxis, ...]
         self.frames.append(obs)
         return self.observation(None), reward, done, trunc, info
 
     def observation(self, observation):        
         assert len(self.frames) == self.k
+        if self.force_np:
+            return np.array(LazyArray(list(self.frames)))
         return LazyArray(list(self.frames))
 
 

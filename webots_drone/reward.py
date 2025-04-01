@@ -7,63 +7,56 @@ Created on Wed Nov 22 11:35:08 2023
 """
 
 import numpy as np
+from webots_drone.utils import compute_angle_diff
 from webots_drone.utils import compute_distance
-from webots_drone.utils import compute_target_orientation
 from webots_drone.utils import check_target_distance
 from webots_drone.utils import check_same_position
 from webots_drone.utils import min_max_norm
 from webots_drone.utils import target_mask
 
 
-def orientation2reward(orientation_diff):
-    return (orientation_diff + 1.) / 2.
+def orientation2reward(orientation, ref_orientation):
+    return - np.abs(compute_angle_diff(orientation, ref_orientation, True))
 
 
 def distance2reward(distance, ref_distance):
-    return - abs(1. - distance / ref_distance)
+    return - np.abs(1. - distance / ref_distance)
 
 
-def elevation2reward(elevation_angle):
-    return 1 - abs(elevation_angle)
-
-
-def velocity2reward(velocity, pos_thr=0.003, vel_factor=0.035):
-    dist_diff = velocity
-    dist_diff *= np.abs(velocity).round(4) > pos_thr  # ensure minimum diff
-    return np.clip(dist_diff / vel_factor, -1, 1)
-
-
-def compute_vector_reward(vtarget, pos_t, pos_t1, orientation_t1,
-                          goal_distance=36., distance_margin=5.,
-                          vel_factor=0.035, pos_thr=0.003):
-    # compute orientation reward
-    r_orientation = orientation2reward(
-        vtarget.get_orientation_diff(pos_t1, orientation_t1, norm=True))
+def compute_vector_reward(vtarget, pos_t, pos_t1, orientation_t1, delta_time,
+                          goal_distance=36., distance_margin=5.):
+    goal_reached = False
     # compute distance reward
     dist_t1 = vtarget.get_distance(pos_t1)
     r_distance = distance2reward(dist_t1, goal_distance)
+    r_distance = np.clip(r_distance, -10, 0) / 10.
+    # compute orientation reward
+    orientation2target = vtarget.get_orientation(pos_t1)
+    r_orientation = orientation2reward(orientation_t1, orientation2target)
+    # compute elevation reward
+    elevation_t1 = vtarget.get_elevation_angle(pos_t1)
+    r_elevation = orientation2reward(elevation_t1, 0)
     # compute velocity reward
     dist_t = vtarget.get_distance(pos_t)
-    r_velocity = velocity2reward(dist_t - dist_t1, pos_thr, vel_factor)
-    # compute velocity reward
-    r_elevation = elevation2reward(vtarget.get_elevation_angle(pos_t1, True))
+    vel_factor = (dist_t - dist_t1) / delta_time
     # check zones
     zones = check_target_distance(dist_t1, goal_distance, distance_margin)
-    # inverse when trespass risk distance
+    # inverse when trespass risk zone
     if zones[0]:
-        r_velocity *= -1.
-    # velocity positive when in goal
+        vel_factor *= -1.
+    # velocity positive when in goal zone
+    inzone_pose = 0
     if zones[1]:
-        dist_t_factor = 1 + distance2reward(dist_t, goal_distance)
-        dist_t1_factor = 1 + distance2reward(dist_t1, goal_distance)
-        move_factor = 1 - check_same_position(pos_t, pos_t1, pos_thr)
-        r_velocity = dist_t_factor * dist_t1_factor * move_factor
+        vel_factor = compute_distance(pos_t, pos_t1) / delta_time
+        inzone_pose = (1. + r_distance) * (1. + r_orientation) * (1. + r_elevation)
+        vel_factor *= inzone_pose
+        goal_reached = inzone_pose > .95
 
     # compose reward
-    r_velocity = r_velocity * r_orientation * r_elevation  # [-1, 1]
-    r_pose = r_distance + (r_orientation - 1) + (r_elevation - 1)  # ]-inf, 0]
-    r_sum = r_velocity + r_pose * 0.1
-    return r_sum
+    pose_factor = r_distance + r_orientation + r_elevation  # ]-inf, 0]
+    r_sum = vel_factor + pose_factor * 0.1
+
+    return r_sum, goal_reached
 
 
 def compute_visual_reward(observation):

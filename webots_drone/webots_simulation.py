@@ -403,6 +403,7 @@ def run(controller, show=True, action_fn=kb2action, **kwargs):
         target_ori = vtarget.get_orientation(uav_pos_t1)
         if not is_3d:
             uav_pos_t[2] = uav_pos_t1[2] = target_xy[2]
+        delta_time = round(next_state['timestamp'] - state['timestamp'], 6)
 
         # compute reward components
         curr_distance = compute_distance(target_xy, uav_pos_t)
@@ -410,10 +411,9 @@ def run(controller, show=True, action_fn=kb2action, **kwargs):
         distance_diff = np.round(curr_distance - next_distance, 4)
         distance_diff *= np.abs(distance_diff) > reward_pos_thr
 
-        reward = compute_vector_reward(
-            vtarget, uav_pos_t, uav_pos_t1, uav_ori_t1,
-            goal_distance=distance2target, distance_margin=goal_threshold,
-            vel_factor=reward_vel_factor, pos_thr=reward_pos_thr)
+        reward, _ = compute_vector_reward(
+            vtarget, uav_pos_t, uav_pos_t1, uav_ori_t1, delta_time,
+            goal_distance=distance2target, distance_margin=goal_threshold)
 
         # observation = info2image(next_state, output_size=84)
         # reward += compute_visual_reward(observation)

@@ -66,7 +66,6 @@ class SetPhase:
 
 
 def read_args(args_path):
-    print('Reading arguments from:', args_path)
     args = dict()
     with open(args_path, 'r') as f:
         args = json.load(f)
@@ -96,18 +95,22 @@ def apply_phase(history_df, args_path):
     return history_df
 
 
-def find_last_iteration(csv_file):
+def find_last_iteration(csv_path):
     import os
 
-    with open(csv_file, 'rb') as f:
-        try:  # catch OSError in case of a one line file 
-            f.seek(-2, os.SEEK_END)
-            while f.read(1) != b'\n':
-                f.seek(-2, os.SEEK_CUR)
-        except OSError:
-            f.seek(0)
-        last_line = f.readline().decode()
-    return int(last_line.split(',')[2])
+    last_iter = -1
+    csv_file = open(csv_path, 'rb')
+    try:  # catch OSError in case of a one line file
+        csv_file.seek(-2, os.SEEK_END)
+        while csv_file.read(1) != b'\n':
+            csv_file.seek(-2, os.SEEK_CUR)
+        last_line = csv_file.readline().decode()
+        last_iter = int(last_line.split(',')[2])
+    except OSError:  # if one line file nothing to do
+        pass
+    finally:
+        csv_file.close()
+        return last_iter
 
 
 class MultipleCallbacksOnStep:
@@ -125,10 +128,9 @@ class MultipleCallbacksOnStep:
 class StoreStepData:
     """Callback for save a Gym.state data."""
 
-    def __init__(self, store_path, n_sensors=9, epsilon=False, extra_info=True,
+    def __init__(self, store_path, n_sensors=9, epsilon=None, extra_info=True,
                  other_cols=None):
         self.store_path = Path(store_path)
-        self.store_path.parent.mkdir(parents=True, exist_ok=True)
         self.n_sensors = n_sensors
         self.epsilon = epsilon
         self._phase = 'init'
@@ -136,6 +138,9 @@ class StoreStepData:
         self._iteration = -1
         self.extra_info = extra_info
         self.other_cols = other_cols
+        self.last_state = None
+
+    def init_store(self):
         if self.store_path.is_file():
             print('WARNING:', self.store_path, 'already exists, adding data!')
             self._iteration = find_last_iteration(self.store_path)
@@ -146,8 +151,11 @@ class StoreStepData:
         self.last_state = info2state(info).tolist()
         self._iteration += 1
 
-    def new_episode(self):
-        self._ep += 1
+    def new_episode(self, episode=-1):
+        if episode > -1:
+            self._ep = episode
+        else:
+            self._ep += 1
         self._iteration = -1
 
     def set_learning(self):
@@ -171,7 +179,7 @@ class StoreStepData:
         data_cols += ['next_' + sc for sc in state_cols]
         data_cols += ['absorbing', 'last']
 
-        if self.epsilon is not False:
+        if self.epsilon is not None:
             data_cols += ['epsilon']
         data_cols += ['penalization', 'bonus', 'final']
 
@@ -219,7 +227,7 @@ class StoreStepData:
         row.extend(state)  # next state
         row.append(sample[4])  # absorbing
         row.append(sample[5])  # last
-        if self.epsilon is not False:
+        if self.epsilon is not None:
             row.append(self.epsilon())  # epsilon
 
         row.append(info['penalization'])
@@ -253,18 +261,25 @@ class ExperimentData:
     def __init__(self, experiment_path, csv_name='history_training.csv',
                  env_args='args_environment.json',
                  train_args='args_training.json',
-                 agent_args='args_agent.json'):
+                 agent_args='args_agent.json',
+                 eval_regex=r'eval/history_*.csv'):
         if not isinstance(experiment_path, Path):
             experiment_path = Path(experiment_path)
         self.experiment_path = experiment_path
-        print('Loading experiment data from:', self.experiment_path)
+        print('Loading experiment data from:',
+              self.experiment_path.relative_to(Path.cwd()))
         self.history_df = pd.read_csv(self.experiment_path / csv_name)
         self.env_params = read_args(self.experiment_path / env_args)
         self.train_params = read_args(self.experiment_path / train_args)
         self.agent_params = read_args(self.experiment_path / agent_args)
         # append evaluation results
-        self.join_eval_data()
+        if eval_regex is not None:
+            self.join_eval_data(eval_regex)
         self.set_quadrants()
+
+    @property
+    def alg_name(self):
+        return self.experiment_path.name.split('_')[0].upper()
 
     @property
     def quadrants(self):
@@ -274,7 +289,7 @@ class ExperimentData:
     def flight_area(self):
         return self.env_params["flight_area"]
 
-    def join_eval_data(self, csv_regex=r'eval*/history_*.csv'):
+    def join_eval_data(self, csv_regex=r'eval/history_*.csv'):
         csv_paths = list(self.experiment_path.rglob(csv_regex))
         csv_paths.sort()
         eval_df = None
@@ -289,6 +304,7 @@ class ExperimentData:
         # print('eval_df', eval_df['phase'].describe())
         if eval_df is not None:
             # print('appending eval')
+            eval_df['ep'] -= 1
             self.history_df = pd.concat((self.history_df, eval_df))
             self.history_df = self.history_df.reset_index(drop=True)
 
@@ -334,8 +350,6 @@ class ExperimentData:
     def set_quadrants(self):
         target_quadrant = self.history_df.groupby(
             ['target_pos_x', 'target_pos_y', 'target_pos_z']).agg({'unique'})
-        # target_quadrant = a_df.groupby(
-        #     ['target_pos_x', 'target_pos_y', 'target_pos_z']).agg({'unique'})
         self.history_df['target_quadrant'] = -1
         for i, tpos in enumerate(target_quadrant.index.to_numpy()):
             df_query = (f"target_pos_x=={tpos[0]} &" +
@@ -397,8 +411,7 @@ class ExperimentData:
         phase_df = self.history_df[self.history_df['phase'] == phase]
         return phase_df['ep'].unique().tolist()
 
-    def get_episode_df(self, episode, phase='eval', iteration=None):
-        episode_id = self.get_phase_eps(phase)[episode]
+    def get_episode_df(self, episode_id, phase='eval', iteration=None):
         filtered_df = self.history_df[
             np.logical_and(self.history_df['phase'] == phase,
                            self.history_df['ep'] == episode_id)]
@@ -408,7 +421,7 @@ class ExperimentData:
         return filtered_df
 
     def get_goal_distance(self):
-        risk_distance = compute_risk_distance(*self.env_params['fire_dim'])
+        risk_distance = compute_risk_distance(*self.env_params['target_dim'])
         return risk_distance + self.env_params['goal_threshold'] / 2.
 
     def get_ep_trajectories(self, episode, phase='eval', iteration=None):
@@ -452,23 +465,17 @@ class ExperimentData:
         ep_info = dict()
         for ph in phases:
             phase_info = dict()
-            try:
-                episodes = self.get_phase_eps(ph)
-                tries = [len(self.get_ep_trajectories(e, ph))
-                         for e in episodes]
-                rewards = self.get_reward_curve(ph)
-            except AssertionError:
-                episodes = list()
-                tries = list()
-                rewards = list()
-            finally:
-                phase_info['eps'] = episodes
-                phase_info['tries'] = tries
-                phase_info['rewards'] = rewards
-                ep_info[ph] = phase_info
+            episodes = self.get_phase_eps(ph)
+            tries = [len(self.get_ep_trajectories(e, ph))
+                     for e in episodes]
+            rewards = self.get_reward_curve(ph)
+            phase_info['eps'] = episodes
+            phase_info['tries'] = tries
+            phase_info['rewards'] = rewards
+            ep_info[ph] = phase_info
         return ep_info
 
-    def get_info(self):
+    def get_info(self, phases=['learn', 'eval']):
         state_data = list()
         if self.env_params['is_pixels']:
             state_data.append('RGB')
@@ -497,7 +504,7 @@ class ExperimentData:
             #          self.agent_params["epsilon_steps"],)
             )
 
-        phases_info = self.get_episodes_info()
+        phases_info = self.get_episodes_info(phases)
         for k, v in phases_info.items():
             exp_info[k + '_eps'] = len(v['eps'])
             exp_info[k + '_tries'] = sum(v['tries'])
@@ -603,7 +610,7 @@ class VideoCallback:
 if __name__ == '__main__':
     experiment_path = Path('logs/test_2023-11-21_13-04-15/history.csv')
     exp_data = ExperimentData(experiment_path)
-    trajectory_data = exp_data.get_ep_trajectories(0, [0])
+    trajectory_data = exp_data.get_ep_trajectories(0, iteration=[0])
     trajectory = trajectory_data[0]
     path_length, init_pos, target_pos, times, rewards, orientation = trajectory[:6]
     print('Trajectory with ', path_length, 'steps length, with ',

@@ -90,10 +90,6 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
         # Convert back to np.array for easier handling
         return np.asarray(sorted_area_points)
 
-    def compute_reward(self, obs, info, is_3d=True, vel_factor=0.02,
-                       pos_thr=0.0001):
-        return super().compute_reward(obs, info, is_3d, vel_factor, pos_thr)
-
     def create_target(self, dimension=None):
         # virtualTarget
         vtarget = super().create_target(dimension)
