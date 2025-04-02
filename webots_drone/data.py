@@ -218,7 +218,8 @@ class StoreStepData:
         row.append(info['timestamp'])  # action
         row.extend(self.last_state)  # state
         # action
-        if isinstance(sample[1], (list, tuple, np.ndarray)):
+        if isinstance(sample[1], (list, tuple)) or (
+                isinstance(sample[1], np.ndarray) and len(sample[1].shape) > 0):
             action_str = ','.join(map(str, sample[1]))
             row.append(f'"[{action_str}]"')
         else:

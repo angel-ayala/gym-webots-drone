@@ -104,9 +104,9 @@ class CustomVectorObservation(gym.Wrapper):
             obs_high_limits.extend([1. for _ in range(n_dist_sensors)])
             obs_low_limits.extend([0. for _ in range(n_dist_sensors)])
         if 'target_sensors' in uav_data:
-            obs_elems += 4
-            obs_high_limits.extend([1. for _ in range(4)])
-            obs_low_limits.extend([0. for _ in range(4)])
+            obs_elems += 6
+            obs_high_limits.extend([1. for _ in range(6)])
+            obs_low_limits.extend([0. for _ in range(6)])
         if 'motors' in uav_data:
             obs_elems += 4
             obs_high_limits.extend([float('inf') for _ in range(4)])

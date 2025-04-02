@@ -313,8 +313,9 @@ def constrained_action(action, position, north_rad, flight_area, is_vel=False):
 
 
 def compute_angle_diff(angle1, angle2, normalized=False):
+    _pi = round(np.pi, 6)
     delta_theta = angle2 - angle1
-    delta_theta = (delta_theta + np.pi) % (2 * np.pi) - np.pi
+    delta_theta = (delta_theta + _pi) % (2 * _pi) - _pi
     if normalized:
-        delta_theta = delta_theta / np.pi
+        delta_theta = delta_theta / _pi
     return np.round(delta_theta, 6)

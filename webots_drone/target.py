@@ -140,24 +140,27 @@ class VirtualTarget:
         return self.risk_distance + threshold
 
     def get_sensor_readings(self, ref_position, ref_orientation, range_dist=10.):
-        # defines the most activated sensor
-        angle_diff = self.get_orientation_diff(ref_position, ref_orientation, False)
-        angle_diff_norm = angle_diff / np.pi
-        angle_offset = np.abs(angle_diff) / (np.pi * 0.5)
-        angle_sensors = np.array([
-            max(0., 1. - angle_offset),    # front sensor
-            max(0., angle_offset - 1.),   # rear sensor
-            max(0., angle_diff_norm),      # left sensor
-            max(0., angle_diff_norm * -1.)  # right sensor
-            ])
         # defines measurement strenght
         pos_diff = np.subtract(ref_position, self.position)
-        scalar_xy = np.linalg.norm(pos_diff[:2]) / self.get_risk_distance()
-        scalar_xy = 1 - scalar_xy / range_dist  # [0, 1]
-        scalar_z = np.clip(np.linalg.norm(pos_diff[-1]) / range_dist, 0, 1)
-        dist_scalar = np.clip(scalar_xy - scalar_z, 0, 1)
+        strength_xy = np.linalg.norm(pos_diff[:2]) / self.get_risk_distance()
+        strength_xy = np.clip(1 - strength_xy / range_dist, 0., 1.)
+        strength_z = np.clip(np.linalg.norm(pos_diff[-1]) / range_dist, 0., 1.)
+        strength_z *= np.sign(pos_diff[-1])
+        # defines highest sensor activation
+        angle_diff = self.get_orientation_diff(ref_position, ref_orientation, False)
+        pi_half = round(np.pi * 0.5, 6)
+        angle_offset = angle_diff / pi_half
+        # sensors
+        front_middle = max(0., 1. - np.abs(angle_offset)) * strength_xy
+        front_upper = max(0., front_middle - strength_z)
+        front_bottom = max(0., front_middle + strength_z)
+        back = max(0., np.abs(angle_offset) - 1.) * strength_xy
+        right = 1 - np.abs(compute_angle_diff(angle_diff, pi_half, True)) * strength_xy
+        left = 1 - np.abs(compute_angle_diff(angle_diff, -pi_half, True)) * strength_xy
         # resolution up to three digits
-        return (angle_sensors * dist_scalar).round(3)
+        angle_sensors = np.array([front_upper, front_middle, front_bottom,
+                                  back, left, right]).round(3)
+        return angle_sensors
 
     def __repr__(self):
         str_out = f"VirtualTarget(pos=[x: {self.position[0]:.3f}, "
