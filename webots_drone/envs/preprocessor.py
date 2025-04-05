@@ -15,7 +15,7 @@ from sklearn.preprocessing import MinMaxScaler
 from webots_drone.stack import ObservationStack
 
 
-UAV_DATA = ['imu', 'gyro', 'gps', 'gps_vel', 'north', 'dist_sensors'
+UAV_DATA = ['imu', 'gyro', 'gps', 'gps_vel', 'north', 'dist_sensors',
             'motors', 'target_sensors']
 
 

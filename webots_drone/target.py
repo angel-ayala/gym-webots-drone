@@ -149,12 +149,12 @@ class VirtualTarget:
         # defines highest sensor activation
         angle_diff = self.get_orientation_diff(ref_position, ref_orientation, False)
         pi_half = round(np.pi * 0.5, 6)
-        angle_offset = angle_diff / pi_half
+        angle_offset = np.abs(angle_diff / pi_half)
         # sensors
-        front_middle = max(0., 1. - np.abs(angle_offset)) * strength_xy
+        front_middle = max(0., 1. - angle_offset) * strength_xy
         front_upper = max(0., front_middle - strength_z)
         front_bottom = max(0., front_middle + strength_z)
-        back = max(0., np.abs(angle_offset) - 1.) * strength_xy
+        back = max(0., angle_offset - 1.) * strength_xy
         right = 1 - np.abs(compute_angle_diff(angle_diff, pi_half, True)) * strength_xy
         left = 1 - np.abs(compute_angle_diff(angle_diff, -pi_half, True)) * strength_xy
         # resolution up to three digits
