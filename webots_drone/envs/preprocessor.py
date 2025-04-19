@@ -109,7 +109,7 @@ class CustomVectorObservation(gym.Wrapper):
             obs_low_limits.extend([0. for _ in range(6)])
         if 'motors' in uav_data:
             obs_elems += 4
-            obs_high_limits.extend([float('inf') for _ in range(4)])
+            obs_high_limits.extend([600. for _ in range(4)])
             obs_low_limits.extend([0. for _ in range(4)])
 
         self.target_pos = target_pos

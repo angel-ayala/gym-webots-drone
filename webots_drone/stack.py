@@ -31,7 +31,7 @@ class ObservationStack(gym.Wrapper):
         shp = env.observation_space.shape
         obs_low = env.observation_space.low
         obs_high = env.observation_space.high
-        if self.add_temporal_channel:
+        if self.add_temporal_channel or len(shp) < 2:
             obs_low = obs_low[np.newaxis, ...]
             obs_high = obs_high[np.newaxis, ...]
         obs_low = np.repeat(obs_low, k, axis=0)
