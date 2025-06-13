@@ -5,7 +5,6 @@ Created on Mon Nov 13 19:11:59 2023
 
 @author: Angel Ayala
 """
-import json
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -15,6 +14,7 @@ import time
 from webots_drone.envs.preprocessor import info2state
 from webots_drone.envs.drone_discrete import DroneEnvDiscrete
 from webots_drone.utils import compute_risk_distance
+from webots_drone.target import VirtualTarget
 
 
 class SetEpisode:
@@ -66,9 +66,20 @@ class SetPhase:
 
 
 def read_args(args_path):
-    args = dict()
-    with open(args_path, 'r') as f:
-        args = json.load(f)
+    args = {}
+    if '.yml' in str(args_path).lower():
+        import yaml
+
+        with open(args_path, 'r') as stream:
+            try:
+                args = yaml.safe_load(stream)
+            except yaml.YAMLError as exc:
+                print(exc)
+
+    elif '.json' in str(args_path).lower():
+        import json
+        with open(args_path, 'r') as f:
+            args = json.load(f)
     return args
 
 
@@ -260,52 +271,53 @@ class StoreStepData:
 
 class ExperimentData:
     def __init__(self, experiment_path, csv_name='history_training.csv',
-                 env_args='args_environment.json',
-                 train_args='args_training.json',
-                 agent_args='args_agent.json',
-                 eval_regex=r'eval/history_*.csv'):
+                 exp_args='arguments.json', eval_regex=r'eval/history_*.csv'):
         if not isinstance(experiment_path, Path):
             experiment_path = Path(experiment_path)
         self.experiment_path = experiment_path
-        print('Loading experiment data from:',
-              self.experiment_path.relative_to(Path.cwd()))
+        # print('Loading experiment path:', self.experiment_path)
         self.history_df = pd.read_csv(self.experiment_path / csv_name)
-        self.env_params = read_args(self.experiment_path / env_args)
-        self.train_params = read_args(self.experiment_path / train_args)
-        self.agent_params = read_args(self.experiment_path / agent_args)
+        self.exp_args = read_args(self.experiment_path / exp_args)
+        self.load_env_data()
         # append evaluation results
         if eval_regex is not None:
             self.join_eval_data(eval_regex)
         self.set_quadrants()
+        # set alg_name
+        full_name = self.experiment_path.name.split('_')[0].upper()
+        self.alg_name = full_name.replace('-JOINT', '')
 
-    @property
-    def alg_name(self):
-        return self.experiment_path.name.split('_')[0].upper()
+    def load_env_data(self, filename='environment.json'):
+        data_path = self.experiment_path / filename
+        if not data_path.exists():
+            data_path = self.experiment_path / 'eval' / filename            
+        env_params = read_args(data_path)
+        self.exp_args['target_quadrants'] = eval(env_params['target_quadrants'])
+        self.exp_args['flight_area'] = eval(env_params['flight_area'])
 
     @property
     def quadrants(self):
-        return self.env_params["target_quadrants"]
+        return self.exp_args["target_quadrants"]
 
     @property
     def flight_area(self):
-        return self.env_params["flight_area"]
+        return self.exp_args["flight_area"]
 
     def join_eval_data(self, csv_regex=r'eval/history_*.csv'):
         csv_paths = list(self.experiment_path.rglob(csv_regex))
         csv_paths.sort()
         eval_df = None
-        if len(csv_paths) > 0:
-            print(f"Loading {len(csv_paths)} evaluation data files")
+        # if len(csv_paths) > 0:
+        #     print(f"Found {len(csv_paths)} evaluation data files")
         for csv_path in csv_paths:
             ep_df = pd.read_csv(csv_path)
             if eval_df is None:
                 eval_df = ep_df.copy()
             else:
                 eval_df = pd.concat((eval_df, ep_df))
-        # print('eval_df', eval_df['phase'].describe())
         if eval_df is not None:
-            # print('appending eval')
             eval_df['ep'] -= 1
+            eval_df = eval_df.sort_values(['ep', 'iteration', 'timestamp'])
             self.history_df = pd.concat((self.history_df, eval_df))
             self.history_df = self.history_df.reset_index(drop=True)
 
@@ -371,15 +383,15 @@ class ExperimentData:
         state_cols = ['pos_x', 'pos_y', 'pos_z',
                       'ori_x', 'ori_y', 'ori_z',
                       'vel_x', 'vel_y', 'vel_z',
-                      'velang_x', 'velang_y', 'velang_z',
-                      'north_rad']
+                      'velang_x', 'velang_y', 'velang_z'] #,
+                      # 'north_rad']
         action_col = 'action'
         next_state_cols = ['next_' + sc for sc in state_cols]
 
-        filtered_df.loc[:, 'north_rad'] = filtered_df['north_rad'].map(
-            orientation_correction).copy()
-        filtered_df.loc[:, 'next_north_rad'] = filtered_df['next_north_rad'].map(
-            orientation_correction).copy()
+        # filtered_df.loc[:, 'north_rad'] = filtered_df['north_rad'].map(
+        #     orientation_correction).copy()
+        # filtered_df.loc[:, 'next_north_rad'] = filtered_df['next_north_rad'].map(
+        #     orientation_correction).copy()
         state_data = filtered_df[state_cols].to_numpy()
         next_state_data = filtered_df[next_state_cols].to_numpy()
         actions_data = np.zeros((len(filtered_df), 4))
@@ -410,7 +422,8 @@ class ExperimentData:
         assert phase in avbl_phase, \
             f"The phase argument must be in {avbl_phase}."
         phase_df = self.history_df[self.history_df['phase'] == phase]
-        return phase_df['ep'].unique().tolist()
+        phase_eps = phase_df['ep'].unique().tolist()
+        return phase_eps
 
     def get_episode_df(self, episode_id, phase='eval', iteration=None):
         filtered_df = self.history_df[
@@ -421,9 +434,8 @@ class ExperimentData:
             filtered_df = filtered_df[filtered_df['iteration'] == iter_idx]
         return filtered_df
 
-    def get_goal_distance(self):
-        risk_distance = compute_risk_distance(*self.env_params['target_dim'])
-        return risk_distance + self.env_params['goal_threshold'] / 2.
+    def get_goal_distance(self, target):
+        return target.get_risk_distance(self.exp_args['goal_threshold'] / 2.)
 
     def get_ep_trajectories(self, episode, phase='eval', iteration=None):
         episode_df = self.get_episode_df(episode, phase)
@@ -441,13 +453,14 @@ class ExperimentData:
             trj = dict()
             trj_df = episode_df[episode_df['iteration'] == i]
             s, a, s_t1 = self.get_tuple_control(trj_df)
-            trj['success'] = (trj_df['final'] == 'goal_found').sum() >= 1
+            trj['success'] = (trj_df['final'] == 'GoalFound').sum() >= 1
             trj['steps'] = len(trj_df)
             trj['length'] = np.linalg.norm(
                 s_t1[:, :2] - s[:, :2], axis=1).sum()
             trj['rewards'] = trj_df['reward'].to_numpy()
             trj['timestamp'] = trj_df['timestamp'].to_numpy()
             trj['initial_pos'] = s[0, :3]
+            trj['target_dim'] = trj_df[['target_dim_height', 'target_dim_radius']].to_numpy()[0]
             trj['target_pos'] = trj_df[
                 ['target_pos_x', 'target_pos_y', 'target_pos_z']
                 ].head(1).to_numpy()[0]
@@ -478,31 +491,28 @@ class ExperimentData:
 
     def get_info(self, phases=['learn', 'eval']):
         state_data = list()
-        if self.env_params['is_pixels']:
+        if self.exp_args['is_pixels']:
             state_data.append('RGB')
-        if self.env_params['is_vector']:
-            state_data.extend(self.env_params['uav_data'])
-        for extra_key in ['target_pos2obs', 'target_dist2obs', 'target_dim2obs',
-                          'action2obs']:
-            if self.env_params[extra_key]:
+        if self.exp_args['is_vector']:
+            state_data.extend(self.exp_args['uav_data'])
+        for extra_key in ['add_target_pos', 'add_target_dist', 'add_target_dim',
+                          'add_action']:
+            if self.exp_args[extra_key]:
                 state_data.append(extra_key)
-        if self.env_params['is_multimodal']:
+        if self.exp_args['is_pixels'] and self.exp_args['is_vector']:
             env_mode = 'multimodal'
-        elif self.env_params['is_pixels']:
+        elif self.exp_args['is_pixels']:
             env_mode = 'pixel-based'
-        elif self.env_params['is_vector']:
+        elif self.exp_args['is_vector']:
             env_mode = 'vector-based'
 
         exp_info = dict(
             data_path=self.experiment_path,
             mode=env_mode,
-            is_srl=self.agent_params['is_srl'],
-            fix_target_pos=self.env_params['target_pos'] is not None,
+            is_srl=self.exp_args['is_srl'],
+            fix_target_pos=self.exp_args['target_pos'] is not None,
             state_data=state_data,
-            seed=self.train_params['seed']
-            # epsilon=(self.agent_params["epsilon_start"],
-            #          self.agent_params["epsilon_end"],
-            #          self.agent_params["epsilon_steps"],)
+            seed=self.exp_args['seed']
             )
 
         phases_info = self.get_episodes_info(phases)
@@ -519,11 +529,11 @@ class ExperimentData:
         for i, trj_data in enumerate(ep_trajectories):
             trj_summ[i, 0] = trj_data['success']
             trj_summ[i, 1] = trj_data['length']
-            short_dist = np.linalg.norm(
-                trj_data['target_pos'] - trj_data['initial_pos'])
-            trj_summ[i, 2] = short_dist - self.get_goal_distance()
-            trj_summ[i, 3] = trj_data['target_dists'][-1] -\
-                self.get_goal_distance()
+            short_dist = np.linalg.norm(trj_data['target_pos'] - trj_data['initial_pos'])
+            target = VirtualTarget(trj_data['target_dim'])
+            target.set_position(trj_data['target_pos'])
+            trj_summ[i, 2] = short_dist - self.get_goal_distance(target)
+            trj_summ[i, 3] = trj_data['target_dists'][-1] - self.get_goal_distance(target)
 
         # Success Rate (SR)
         sr = trj_summ[:, 0].mean()
@@ -540,26 +550,30 @@ class ExperimentData:
 
     def get_nav_metrics(self, phase='eval'):
         episodes = self.get_phase_eps(phase)
-        metrics = list()
+        metrics = {}
         for ep in episodes:
-            metrics.append(self.compute_ep_nav_metrics(ep, phase))
+            nav_metrics = self.compute_ep_nav_metrics(ep, phase)
+            for k, v in nav_metrics.items():
+                if k not in metrics:
+                    metrics[k] = []
+                metrics[k].append(v)
         return metrics
 
     def get_epsilon_curve(self):
-        epsilon=(self.agent_params["epsilon_start"],
-                 self.agent_params["epsilon_end"],
-                 self.agent_params["epsilon_steps"],)
+        epsilon=(self.exp_args["epsilon_start"],
+                 self.exp_args["epsilon_end"],
+                 self.exp_args["epsilon_steps"],)
         diff = epsilon[1] - epsilon[0]
-        diff /= self.agent_params["epsilon_steps"]
+        diff /= self.exp_args["epsilon_steps"]
         eps_values = np.linspace(*epsilon)
         return eps_values
 
     def get_mem_beta_curve(self):
-        mem_beta=(self.agent_params["memory_buffer"]["beta"],
+        mem_beta=(self.exp_args["memory_buffer"]["beta"],
                   1.,
-                  self.agent_params["memory_buffer"]["beta_steps"],)
+                  self.exp_args["memory_buffer"]["beta_steps"],)
         diff = mem_beta[1] - mem_beta[0]
-        diff /= self.agent_params["epsilon_steps"]
+        diff /= self.exp_args["beta_steps"]
         beta_values = np.linspace(*mem_beta)
         return beta_values
 
