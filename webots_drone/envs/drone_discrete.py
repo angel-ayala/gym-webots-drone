@@ -8,10 +8,10 @@ Created on Fri May 29 19:11:52 2020
 import numpy as np
 from gymnasium import spaces
 
-from webots_drone.envs import DroneEnvContinuous
+from webots_drone.envs import MavicEnvContinuous
 
 
-class DroneEnvDiscrete(DroneEnvContinuous):
+class MavicEnvDiscrete(MavicEnvContinuous):
     """Gym enviroment to control the Fire scenario in the Webots simulator."""
 
     metadata = {
@@ -28,7 +28,7 @@ class DroneEnvDiscrete(DroneEnvContinuous):
                  target_pos=2,
                  target_dim=[7., 3.5],
                  is_pixels=True):
-        super(DroneEnvDiscrete, self).__init__(
+        super(MavicEnvDiscrete, self).__init__(
             time_limit_seconds=time_limit_seconds,
             max_no_action_seconds=max_no_action_seconds,
             frame_skip=frame_skip,
@@ -62,4 +62,4 @@ class DroneEnvDiscrete(DroneEnvContinuous):
         """Do an action step inside the Webots simulator."""
         mapped_action = self.discrete2continuous(action)
 
-        return super(DroneEnvDiscrete, self).step(mapped_action)
+        return super(MavicEnvDiscrete, self).step(mapped_action)

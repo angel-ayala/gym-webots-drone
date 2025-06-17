@@ -27,7 +27,7 @@ from .preprocessor import info2image
 from .preprocessor import info2state
 
 
-class DroneEnvContinuous(gym.Env):
+class MavicEnvContinuous(gym.Env):
     """Gym enviroment to control the Fire scenario in the Webots simulator."""
 
     metadata = {

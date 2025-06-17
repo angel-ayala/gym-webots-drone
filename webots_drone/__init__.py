@@ -21,13 +21,13 @@ __author__ = 'Angel Ayala'
 
 
 register(
-    id='webots_drone/DroneEnvContinuous-v0',
-    entry_point='webots_drone.envs:DroneEnvContinuous',
+    id='webots_drone/MavicEnvContinuous-v0',
+    entry_point='webots_drone.envs:MavicEnvContinuous',
 )
 
 register(
-    id='webots_drone/DroneEnvDiscrete-v0',
-    entry_point='webots_drone.envs:DroneEnvDiscrete',
+    id='webots_drone/MavicEnvDiscrete-v0',
+    entry_point='webots_drone.envs:MavicEnvDiscrete',
 )
 
 register(

@@ -9,11 +9,11 @@ import numpy as np
 from gymnasium import logger
 from gymnasium import spaces
 
-from webots_drone.envs import DroneEnvContinuous
+from webots_drone.envs import MavicEnvContinuous
 from webots_drone.utils import constrained_action
 
 
-class CrazyflieEnvContinuous(DroneEnvContinuous):
+class CrazyflieEnvContinuous(MavicEnvContinuous):
     """Gym enviroment to control the Crazyflie drone in Webots simulator."""
 
     def __init__(self, time_limit_seconds=60,  # 1 min
