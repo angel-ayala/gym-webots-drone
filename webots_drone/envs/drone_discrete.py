@@ -27,8 +27,7 @@ class DroneEnvDiscrete(DroneEnvContinuous):
                  altitude_limits=[11, 75],
                  target_pos=2,
                  target_dim=[7., 3.5],
-                 is_pixels=True,
-                 zone_steps=0):
+                 is_pixels=True):
         super(DroneEnvDiscrete, self).__init__(
             time_limit_seconds=time_limit_seconds,
             max_no_action_seconds=max_no_action_seconds,
@@ -38,8 +37,7 @@ class DroneEnvDiscrete(DroneEnvContinuous):
             altitude_limits=altitude_limits,
             target_pos=target_pos,
             target_dim=target_dim,
-            is_pixels=is_pixels,
-            zone_steps=zone_steps)
+            is_pixels=is_pixels)
 
         # Action space discretized, roll, pitch, and yaw only
         control_limits = self.action_limits.copy()

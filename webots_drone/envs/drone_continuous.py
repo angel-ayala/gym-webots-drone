@@ -42,8 +42,7 @@ class DroneEnvContinuous(gym.Env):
                  altitude_limits=[11, 75],
                  target_pos=2,
                  target_dim=[7., 3.5],
-                 is_pixels=True,
-                 zone_steps=10):
+                 is_pixels=True):
 
         self.init_sim()
         # Action space, the angles and altitud
@@ -85,14 +84,10 @@ class DroneEnvContinuous(gym.Env):
         self.flight_area = self.sim.get_flight_area(altitude_limits)
         self.sample_quadrants = list()
         self.max_distance = compute_distance(*self.flight_area)
-        self.quadrants = self.create_quadrants()
 
-        # self.reward_limits = [-2. - (2.21 * self._frame_inter[0]),
-        #                       3.21 * self._frame_inter[1]]
-        # self.zone_steps = zone_steps if zone_steps > 0 else float('inf')
-
-        # virtualTarget
+        # VirtualTarget and possible positions
         self.vtarget = self.create_target(target_dim)
+        self.quadrants = self.create_quadrants()
 
     def init_sim(self):
         from webots_drone import WebotsSimulation
@@ -102,11 +97,12 @@ class DroneEnvContinuous(gym.Env):
         logger.info('Connected to Webots')
 
     def create_quadrants(self):
+        altitude = np.clip(self.vtarget.dimension[0] * 5, *self.flight_area[:, -1]) * 2
         quadrants = np.array(
-            [(self.flight_area[0][0], self.flight_area[1][1]),
-             (self.flight_area[1][0], self.flight_area[1][1]),
-             (self.flight_area[1][0], self.flight_area[0][1]),
-             (self.flight_area[0][0], self.flight_area[0][1])])
+            [(self.flight_area[0][0], self.flight_area[1][1], altitude),
+             (self.flight_area[1][0], self.flight_area[1][1], altitude),
+             (self.flight_area[1][0], self.flight_area[0][1], altitude),
+             (self.flight_area[0][0], self.flight_area[0][1], altitude)])
         quadrants /= 2.
         return quadrants
 
@@ -133,7 +129,6 @@ class DroneEnvContinuous(gym.Env):
     def init_runtime_vars(self):
         self._episode_steps = 0  # time limit control
         self._no_action_steps = 0  # no action control
-        self._in_zone_steps = 0  # time inside zone control
         self._risk_zone_steps = 0  # time inside risk zone control
         self._out_area_steps = 0  # time outside flight area control
         self._zone_flags = [False, False, False]  # zone control flags
@@ -172,8 +167,7 @@ class DroneEnvContinuous(gym.Env):
         # ensure fire position inside the flight_area
         tpos[0] = np.clip(tpos[0], *self.flight_area[:, 0])
         tpos[1] = np.clip(tpos[1], *self.flight_area[:, 1])
-        if self.vtarget.is_3d:
-            tpos[2] = np.clip(tpos[2], *self.flight_area[:, 2])
+        tpos[2] = np.clip(tpos[2], *self.flight_area[:, 2])
 
         self.vtarget.set_position(tpos)
 

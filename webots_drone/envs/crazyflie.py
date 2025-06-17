@@ -24,8 +24,7 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
                  altitude_limits=[0.25, 2.],
                  target_pos=2,
                  target_dim=[.05, .02],
-                 is_pixels=False,
-                 zone_steps=10):
+                 is_pixels=False):
         super(CrazyflieEnvContinuous, self).__init__(
             time_limit_seconds=time_limit_seconds,  # 1 min
             max_no_action_seconds=max_no_action_seconds,  # 5 sec
@@ -35,8 +34,7 @@ class CrazyflieEnvContinuous(DroneEnvContinuous):
             altitude_limits=altitude_limits,
             target_pos=target_pos,
             target_dim=target_dim,
-            is_pixels=is_pixels,
-            zone_steps=zone_steps)
+            is_pixels=is_pixels)
 
     def init_sim(self):
         # Simulation controller
@@ -115,8 +113,7 @@ class CrazyflieEnvDiscrete(CrazyflieEnvContinuous):
                  altitude_limits=[0.25, 2.],
                  target_pos=2,
                  target_dim=[.05, .02],
-                 is_pixels=False,
-                 zone_steps=10):
+                 is_pixels=False):
         super(CrazyflieEnvDiscrete, self).__init__(
             time_limit_seconds=time_limit_seconds,  # 1 min
             max_no_action_seconds=max_no_action_seconds,  # 5 sec
@@ -126,8 +123,7 @@ class CrazyflieEnvDiscrete(CrazyflieEnvContinuous):
             altitude_limits=altitude_limits,
             target_pos=target_pos,
             target_dim=target_dim,
-            is_pixels=is_pixels,
-            zone_steps=zone_steps)
+            is_pixels=is_pixels)
 
         # Action space discretized + no action
         control_limits = np.hstack((self.action_limits[1],

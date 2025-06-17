@@ -90,9 +90,11 @@ class VirtualTarget:
             target_pos = self.node['get_pos']()
             for i in range(len(position)):
                 target_pos[i] = position[i]
+            if not self.is_3d:
+                target_pos[2] = self.dimension[0] / 2.
 
             self.node['set_pos'](list(target_pos))
-        self.position = target_pos
+        self.position = position
 
         return self.position
 
