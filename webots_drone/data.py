@@ -12,7 +12,7 @@ import re
 import time
 
 from webots_drone.envs.preprocessor import info2state
-from webots_drone.envs.drone_discrete import DroneEnvDiscrete
+from webots_drone.envs.drone_discrete import MavicEnvDiscrete
 from webots_drone.utils import compute_risk_distance
 from webots_drone.target import VirtualTarget
 
