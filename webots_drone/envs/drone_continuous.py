@@ -5,9 +5,10 @@ Created on Fri May 29 19:11:52 2020
 
 @author: Angel Ayala <angel4ayala [at] gmail.com>
 """
-import gymnasium as gym
+import copy
 import numpy as np
 
+import gymnasium as gym
 from gymnasium import spaces, logger
 from gymnasium.utils import seeding
 
@@ -98,13 +99,13 @@ class MavicEnvContinuous(gym.Env):
 
     def create_quadrants(self):
         altitude = np.clip(self.vtarget.dimension[0] * 5, *self.flight_area[:, -1]) * 2
-        altitude = np.round(altitude, 2)
         quadrants = np.array(
             [(self.flight_area[0][0], self.flight_area[1][1], altitude),
              (self.flight_area[1][0], self.flight_area[1][1], altitude),
              (self.flight_area[1][0], self.flight_area[0][1], altitude),
              (self.flight_area[0][0], self.flight_area[0][1], altitude)])
         quadrants /= 2.
+        quadrants = np.round(quadrants, 2)
         return quadrants
 
     def set_reaction_intervals(self, frame_skip):
@@ -157,7 +158,7 @@ class MavicEnvContinuous(gym.Env):
                 self.sample_quadrants = list(range(len(self.quadrants)))
                 self.np_random.shuffle(self.sample_quadrants)
             quadrant = self.sample_quadrants.pop(0)
-        return self.quadrants[quadrant]
+        return copy.deepcopy(self.quadrants[quadrant])
 
     def set_target(self, position=None, dimension=None):
         # update position

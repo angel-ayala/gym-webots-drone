@@ -6,6 +6,7 @@ Created on Wed Oct 30 15:29:06 2024
 @author: Angel Ayala <angel4ayala [at] gmail.com>
 """
 
+import copy
 import numpy as np
 
 from webots_drone.utils import angle_90deg_offset
@@ -82,9 +83,6 @@ class VirtualTarget:
 
         :param list pos: The [X, Y, Z] position values where locate the node.
         """
-        # ensure fire position inside the flight_area
-        target_pos = position
-
         # set new position
         if self.node is not None:
             target_pos = self.node['get_pos']()
@@ -94,18 +92,14 @@ class VirtualTarget:
                 target_pos[2] = self.dimension[0] / 2.
 
             self.node['set_pos'](list(target_pos))
+
         self.position = position
 
         return self.position
 
     def get_distance(self, reference):
         """Compute the distance between the reference and the target."""
-        target_pos = self.position
-        # consider only xy coordinates
-        if not self.is_3d:
-            target_pos[2] = reference[2]
-        # Squared Euclidean distance
-        return compute_distance(reference, target_pos)
+        return compute_distance(reference, self.position)
 
     def get_orientation(self, reference):
         """Compute the angle between the reference and the target."""
@@ -115,10 +109,7 @@ class VirtualTarget:
 
     def get_height_diff(self, reference):
         """Compute the height difference between the reference and the target."""
-        if self.is_3d:
-            return (self.position[2] - reference[2]).round(4)
-        else:
-            return 0.
+        return (self.position[2] - reference[2]).round(4)
 
     def get_elevation_angle(self, reference, norm=False):
         """Compute the levation angle between the reference and the target."""
