@@ -398,7 +398,7 @@ class ExperimentData:
 
         for i, (idx, row) in enumerate(filtered_df.iterrows()):
             if isinstance(row[action_col], int):
-                actions_data[i] = DroneEnvDiscrete.discrete2continuous(
+                actions_data[i] = MavicEnvDiscrete.discrete2continuous(
                     row[action_col])
             elif isinstance(row[action_col], str):
                 numbers = row[action_col].split()

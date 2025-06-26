@@ -98,6 +98,7 @@ class MavicEnvContinuous(gym.Env):
 
     def create_quadrants(self):
         altitude = np.clip(self.vtarget.dimension[0] * 5, *self.flight_area[:, -1]) * 2
+        altitude = np.round(altitude, 2)
         quadrants = np.array(
             [(self.flight_area[0][0], self.flight_area[1][1], altitude),
              (self.flight_area[1][0], self.flight_area[1][1], altitude),
