@@ -28,8 +28,7 @@ class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
                  altitude_limits=[0.25, 2.],
                  target_pos=2,
                  target_dim=[.05, .02],
-                 is_pixels=False,
-                 zone_steps=10):
+                 is_pixels=False):
 
         self.init_altitude = init_altitude
         self.agent_id = agent_id
@@ -44,8 +43,7 @@ class RealCrazyflieEnvContinuous(CrazyflieEnvContinuous):
               altitude_limits=altitude_limits,
               target_pos=target_pos,
               target_dim=target_dim,
-              is_pixels=is_pixels,
-              zone_steps=zone_steps)
+              is_pixels=is_pixels)
 
     def init_sim(self):
         import sys

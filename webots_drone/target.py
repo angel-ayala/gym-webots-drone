@@ -109,7 +109,7 @@ class VirtualTarget:
 
     def get_height_diff(self, reference):
         """Compute the height difference between the reference and the target."""
-        return (self.position[2] - reference[2]).round(4)
+        return round(self.position[2] - reference[2], 4)
 
     def get_elevation_angle(self, reference, norm=False):
         """Compute the levation angle between the reference and the target."""
