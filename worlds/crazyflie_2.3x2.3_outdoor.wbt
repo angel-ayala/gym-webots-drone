@@ -1,0 +1,66 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/robots/bitcraze/crazyflie/protos/Crazyflie.proto"
+EXTERNPROTO "../protos/RadioController.proto"
+EXTERNPROTO "../protos/OilBarrel.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Pavement.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Grass.proto"
+
+WorldInfo {
+  info [
+    "Bitcraze's Crazyflie drone."
+    "This simulation allows you to pilot the drone with your keyboard."
+  ]
+  title "Crazyflie"
+}
+Viewpoint {
+  orientation 0.532840643186345 0.523121269644774 -0.665150348578426 1.9846001435850342
+  position 0.1172740561131772 1.8610475621469857 8.000940290458795
+  follow "Crazyflie"
+  followType "None"
+}
+TexturedBackground {
+  texture "noon_park_empty"
+}
+TexturedBackgroundLight {
+}
+DEF FlightArea Floor {
+  translation 0 0 0.001
+  name "flightFloor"
+  size 2.3 2.3
+  appearance Pavement {
+    type "black stone"
+  }
+}
+DEF Target OilBarrel {
+  translation -0.51 0.67 0.014
+  rotation 0 1 0 4.692820414042842e-06
+  height 0.025
+  radius 0.02
+}
+Floor {
+  name "roomFloor"
+  size 20 20
+  appearance Grass {
+  }
+}
+DEF Drone Crazyflie {
+  controller "crazyflie_controller"
+  extensionSlot [
+    Receiver {
+      name "ActionReceiver"
+      channel 6
+    }
+    Emitter {
+      name "StateEmitter"
+      channel 4
+    }
+  ]
+}
+RadioController {
+  translation -0.869999 1.48 0.02
+  rotation -0.357406871539237 -0.3574078715388776 -0.8628556898685809 1.71778
+}
